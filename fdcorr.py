@@ -13,7 +13,7 @@ I use scipy.ndimage for image processing.
 rel_max_shift=.2        ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2        ## decimation of images prior to correlation (does not affect the results much)
 databar_pct = (61./484)   ## relative height of databar at the images' bottom - to be clipped prior to correlation
-rel_smoothing = 25./300   ## 
+rel_smoothing = 15./300   ## 
 plot_correlation  = 1 ## diagnostics
 
 ## Image post-processing
@@ -86,7 +86,7 @@ def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
         unsharp = np.dstack([convolve2d(channel, unsharp_kernel, mode='same', boundary='symm') for channel in im])
     else:
         unsharp = convolve2d(im, unsharp_kernel, mode='same', boundary='symm')
-    im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
+    im = np.clip(im*(.7+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
     return im
 def saturate(im, saturation_enhance):
     monochr = np.dstack([np.sum(im, axis=2)]*3)
@@ -108,29 +108,34 @@ for image_name, color in zip(sys.argv[1:], colors):
         im1crop = prev_image[:-databarh:decim, ::decim]*1.0
         ## Find the best correlation of both (cropped) images
         vshift_rel, hshift_rel = find_shift(im1crop, im2crop, plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
-        vshift_sum += vshift_rel; hshift_sum += hshift_rel 
     else:
         vshift_rel, hshift_rel, vshift_sum, hshift_sum = 0, 0, 0, 0     ## Initialize position to centre
 
+    #if  'CL440' in image_name: vshift_rel, hshift_rel = 0,0     # explicit image locking for "troubled cases"
+
     if is_extra:
         extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        paste_overlay(extra_output, im, vshift_sum, hshift_sum, [1,1,1,1], normalize=np.max(im2crop))
+        paste_overlay(extra_output, im, vshift_sum+vshift_rel, hshift_sum+hshift_rel, [1,1,1,1], normalize=np.max(im2crop))
         extra_outputs.append(extra_output)
         extra_names.append(image_name)
-        vshift_sum -= vshift_rel; hshift_sum -= hshift_rel  # revert the temporary shift for extra image
     else:
-        ## Prepare the composite canvas with the first centered image
-        if 'composite_output' not in locals():
-            composite_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
+        ## Process the new added image
         im_unsharp = unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius) 
-        paste_overlay(composite_output, im_unsharp, vshift_sum, hshift_sum, color, normalize=np.max(im2crop))
 
+        ## Prepare the composite canvas with the first centered image
+        if 'composite_output' not in locals(): composite_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
+        paste_overlay(composite_output, im_unsharp, vshift_sum+vshift_rel, hshift_sum+hshift_rel, color, normalize=np.max(im2crop))
+
+        ## Export an individual channel
         channel_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        paste_overlay(channel_output, im_unsharp, vshift_sum, hshift_sum, color, normalize=np.max(im2crop))
+        paste_overlay(channel_output, im_unsharp, vshift_sum+vshift_rel, hshift_sum+hshift_rel, color, normalize=np.max(im2crop))
         channel_outputs.append(channel_output)
         channel_names.append(image_name)
 
+        ## Remember the new transform, and store the image as a background for fitting of the next one
+        vshift_sum += vshift_rel; hshift_sum += hshift_rel 
         prev_image = im
+
 
 #imageio.imsave('composite_' + '.png', composite_output)
 for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): imageio.imsave('channel' + str(n) + '_'+f.split('.')[0]+'.png', i)
