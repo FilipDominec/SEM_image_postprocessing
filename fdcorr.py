@@ -5,6 +5,10 @@
 todo: test on '/home/dominecf/LIMBA/SEM-dle_data_obsolentni/2019/06cerven/190613_319B_254A-FH/319B-FH-190613'
 and '/home/dominecf/LIMBA/SEM-dle_cisla_vzorku/2019/283C_FH-190317_190611/283C_190611'
 
+todo: 
+    np.pad(aa, mode='constant', pad_width=[[1,2],[3,4]])
+    np.all(aa[1] == 5)
+
 I use scipy.ndimage for image processing.
 """
 
