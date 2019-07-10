@@ -14,17 +14,23 @@ I use scipy.ndimage for image processing.
 
 ## User settings
 
-rel_max_shift=.2        ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
+# correlation of images settings
+rel_max_shift=.3        ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2        ## decimation of images prior to correlation (does not affect the results much)
 databar_pct = (61./484)   ## relative height of databar at the images' bottom - to be clipped prior to correlation
-rel_smoothing = 15./300   ## 
+#rel_smoothing = 15./300   ## smoothing of the correlation map (not the output), relative to image width
+rel_smoothing = .01   ## smoothing of the correlation map (not the output), relative to image width
+#rel_smoothing = False   ## no smoothing of the correlation map
 plot_correlation  = 1 ## diagnostics
 
-## Image post-processing
+# Image post-processing settings
 channel_exponent = 1. ## pixelwise exponentiation of image
 saturation_enhance = .15
 unsharp_weight = 2
 unsharp_radius = 50
+
+
+
 
 ## Import common moduli
 import matplotlib, sys, os, time, collections, imageio
@@ -32,6 +38,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import correlate2d, convolve2d
 from scipy.ndimage.filters import laplace
+from scipy.ndimage import affine_transform
 np.warnings.filterwarnings('ignore')
 
 def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None):
@@ -39,18 +46,18 @@ def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None
     shifts im2 against im1 so that a best correlation is found, returns a tuple of the pixel shift
     """
     ## compute the image correlation, and its smoothed Laplacian
-    corr = correlate2d(im1, im2, mode='valid')
+    corr = correlate2d(laplace(im1), im2, mode='valid')
     cr=1  # post-laplace cropping, there were some edge artifacts
     if rel_smoothing:
         rel_smoothing_kernel = np.outer(2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing))**2), 2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing))**2))
         rel_smoothing_kernel /= np.sum(rel_smoothing_kernel)
     else:
         rel_smoothing_kernel = [[1]]
-    laplcorr = convolve2d(-np.abs(laplace(corr)), rel_smoothing_kernel, mode='valid')[cr:-2-cr,cr:-cr] # simple rel_smoothing and removing spurious last 2lines
+    laplcorr = convolve2d(np.abs(corr), rel_smoothing_kernel, mode='valid')[cr:-2-cr,cr:-cr] # simple rel_smoothing and removing spurious last 2lines
     vsize, hsize  = laplcorr.shape
 
     ## find optimum translation for the best image match
-    raw_shifts = (np.unravel_index(np.argmin(laplcorr), laplcorr.shape)) # x,y coords of the minimum in the correlation map
+    raw_shifts = (np.unravel_index(np.argmax(laplcorr), laplcorr.shape)) # x,y coords of the minimum in the correlation map
     vshift_rel, hshift_rel = int((vsize/2 - raw_shifts[0] + 0.5)*decim), int((hsize/2 - raw_shifts[1] - 0.5)*decim) # linear transform against image centre
     print('second image is vertically and horizontally shifted by ({:},{:}) px against the previous one'.format(vshift_rel,hshift_rel))
 
@@ -66,9 +73,23 @@ def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None
 
     return [vshift_rel, hshift_rel]
 
-## Generate a nice rainbow scale
-color_pre_map = np.linspace(0.30, 1, len(sys.argv)-1)
-colors = matplotlib.cm.gist_rainbow_r(color_pre_map) 
+def my_affine_tr(im, trmatrix):
+    t0 = time.time()
+    troffset = np.dot(np.eye(2)-trmatrix, np.array(im_unsharp.shape)/2)
+    return affine_transform(im, trmatrix, offset=troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
+    print('affine tr took', time.time()-t0)
+def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
+    """
+    optimizes the image overlap through finding not only translation, but also skew/rotation/stretch of the second image 
+    """
+    crop_up     = int(im2.shape[0]/2-im1.shape[0]/2-shift_guess[0])
+    crop_bottom = int(im2.shape[0]/2-im1.shape[0]/2-shift_guess[0])
+    crop_left   = int(im2.shape[1]/2-im1.shape[1]/2-shift_guess[1])
+    crop_right  = int(im2.shape[1]/2-im1.shape[1]/2-shift_guess[1])
+    print(np.sum(im1[]*im2))
+    return np.array([[1, .2], [0, 1]])
+#def find_shift2(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None):
+
 
 def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
     #extend_symmetric(composite_output, im.shape[0]+vshift_sum, im.shape[1]+hshift_sum)
@@ -77,8 +98,8 @@ def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
                 image_padding-hs:image_padding+fgimage.shape[1]-hs, channel] += np.clip(fgimage**channel_exponent*float(color[channel])/normalize**channel_exponent, 0, 1)
 
 
+## Image manipulation routines
 #def extend_canvas():
-
 def safe_imload(imname):
     im = imageio.imread(imname.lstrip('+')) * 1.0  # plus sign has a special meaning of an 'extra' image
     if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
@@ -97,25 +118,32 @@ def saturate(im, saturation_enhance):
     return np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, np.max(im))
 
 
+
+colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len(sys.argv)-1))   ## Generate a nice rainbow scale
 channel_outputs, channel_names = [], []
 extra_outputs, extra_names = [], []
 for image_name, color in zip(sys.argv[1:], colors):
-    print('col', color)
     ## Load an image
     im, is_extra = safe_imload(image_name)
-    databarh = int(im.shape[0]*databar_pct)
     max_shift = int(rel_max_shift*im.shape[0])
     image_padding = max_shift*len(sys.argv[1:]) ## FIXME safe very wide black padding, could be optimized!
-    im2crop = im[max_shift:-max_shift-databarh:decim, max_shift:-max_shift:decim]*1.0
+    im2crop = im[max_shift:-max_shift-int(im.shape[0]*databar_pct):decim, max_shift:-max_shift:decim]*1.0
 
-    if 'prev_image' in locals():      ## Find shift from previous image
-        im1crop = prev_image[:-databarh:decim, ::decim]*1.0
-        ## Find the best correlation of both (cropped) images
+    if 'prev_image' in locals():    
+        im1crop = prev_image[:-int(im.shape[0]*databar_pct):decim, ::decim]*1.0
+
+        ## Find the best correlation of both images
+        t0 = time.time()
         vshift_rel, hshift_rel = find_shift(im1crop, im2crop, plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
+        print('correlation took', time.time()-t0)
+
+        ## Find the optimum affine transform of both images
+        trmatrix_sum += find_affine(im1crop, im2crop, trmatrix_sum, verbose=True) - np.eye(2)
     else:
         vshift_rel, hshift_rel, vshift_sum, hshift_sum = 0, 0, 0, 0     ## Initialize position to centre
+        trmatrix_sum = np.eye(2) ## Initialize affine transform to identity
 
-    #if  'CL440' in image_name: vshift_rel, hshift_rel = 0,0     # explicit image locking for "troubled cases"
+
 
     if is_extra:
         extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
@@ -125,6 +153,11 @@ for image_name, color in zip(sys.argv[1:], colors):
     else:
         ## Process the new added image
         im_unsharp = unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius) 
+        if 'M21S' in image_name: 
+            #vshift_rel, hshift_rel = 0,0     # explicit image locking for "troubled cases"
+            im_unsharp = my_affine_tr(im_unsharp, trmatrix_sum)
+            
+            
 
         ## Prepare the composite canvas with the first centered image
         if 'composite_output' not in locals(): composite_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
