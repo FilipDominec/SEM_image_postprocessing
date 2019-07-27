@@ -10,6 +10,16 @@ todo:
     np.all(aa[1] == 5)
 
 I use scipy.ndimage for image processing.
+
+Note: could also interpret the tiff image metadata from our SEM:  
+            from PIL import Image
+            with Image.open('image.tif') as img:
+                img.tag[34680][0].split('\r\n')
+Note: could generate databar like: 
+    AccV	Spot	WorkD   Magnif	DimXY		Scale: 100μm
+    10 kV	6:1.2nA	13.5 mm 5000×	215×145 μm	|−−−−−|
+    Det		Made			Sample name
+    CL400nm	FD 2019-07-26	323B edge
 """
 
 ## User settings
@@ -167,8 +177,8 @@ for image_name, color in zip(sys.argv[1:], colors):
         
     else:
         vshift_rel, hshift_rel, vshift_sum, hshift_sum = 0, 0, 0, 0     ## Initialize position to centre
-        trmatrix_sum = np.eye(2) ## Initialize affine transform to identity
-        shiftvec_sum = np.zeros(2) ## Initialize affine transform to identity
+        trmatrix_sum = np.eye(2)   ## Initialize affine transform to identity
+        shiftvec_sum = np.zeros(2) ## Initialize image shift
 
 
     
@@ -179,7 +189,8 @@ for image_name, color in zip(sys.argv[1:], colors):
         extra_names.append(image_name)
     else:
         ## Process the new added image
-        im_unsharp = my_affine_tr(np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), shiftvec_sum, trmatrix_sum) 
+        im_unsharp = my_affine_tr(np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
+                np.zeros(2), trmatrix_sum) 
         #if 'M21S' in image_name: 
             #vshift_rel, hshift_rel = 0,0     # explicit image locking for "troubled cases"
             #im_unsharp = my_affine_tr(im_unsharp, trmatrix_sum)
@@ -188,11 +199,11 @@ for image_name, color in zip(sys.argv[1:], colors):
 
         ## Prepare the composite canvas with the first centered image
         if 'composite_output' not in locals(): composite_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        paste_overlay(composite_output, im_unsharp, vshift_sum+vshift_rel, hshift_sum+hshift_rel, color, normalize=np.max(im2crop))
+        paste_overlay(composite_output, im_unsharp, int(shiftvec_sum[0]), int(shiftvec_sum[1]), color, normalize=np.max(im2crop))
 
         ## Export an individual channel
         channel_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        paste_overlay(channel_output, im_unsharp, vshift_sum+vshift_rel, hshift_sum+hshift_rel, color, normalize=np.max(im2crop))
+        paste_overlay(channel_output, im_unsharp, int(shiftvec_sum[0]), int(shiftvec_sum[1]), color, normalize=np.max(im2crop))
         channel_outputs.append(channel_output)
         channel_names.append(image_name)
 
