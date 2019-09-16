@@ -27,8 +27,7 @@ Note: could generate databar like:
 # correlation of images settings
 rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (does not affect the results much)
-#databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
-databar_pct = 0.01     ## relative height of databar at the images' bottom - to be clipped prior to correlation
+databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
 #rel_smoothing = 15./300    ## smoothing of the correlation map (not the output), relative to image width
 rel_smoothing = .01         ## smoothing of the correlation map (not the output), relative to image width
 #rel_smoothing = False      ## no smoothing of the correlation map
@@ -73,7 +72,6 @@ def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None
     ## find optimum translation for the best image match
     raw_shifts = (np.unravel_index(np.argmax(np.abs(laplcorr)), laplcorr.shape)) # x,y coords of the minimum in the correlation map
     vshift_rel, hshift_rel = int((vsize/2 - raw_shifts[0] + 0.5)*decim), int((hsize/2 - raw_shifts[1] - 0.5)*decim) # linear transform against image centre
-    print('next image is vertically and horizontally shifted by ({:},{:}) px against the previous one'.format(vshift_rel,hshift_rel))
 
     if plot_correlation_name:
         fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15))
@@ -114,14 +112,15 @@ def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
 
 def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
     for channel in range(3):
-        bgimage[image_padding-vs:image_padding+fgimage.shape[0]-vs, 
-                image_padding-hs:image_padding+fgimage.shape[1]-hs, 
+        vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
+        hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
+        bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
+                hc-hs:hc+fgimage.shape[1]-hs, 
                 channel] += fgimage**channel_exponent*float(color[channel]) 
         #np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
 
 
 ## Image manipulation routines
-#def extend_canvas():
 def safe_imload(imname):
     im = imageio.imread(imname.lstrip('+')) * 1.0  # plus sign has a special meaning of an 'extra' image
     if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
@@ -158,8 +157,6 @@ for image_name in sys.argv[1:]:
 
     from scipy.ndimage.filters import  gaussian_filter
     im2crop = gaussian_filter(im, sigma=decim*.5)[max_shift:-max_shift-int(im.shape[0]*databar_pct):decim, max_shift:-max_shift:decim]*1.0
-    print('im.shape', im.shape)
-    print('im2crop.shape', im2crop.shape)
 
     if 'prev_image' in locals():    
         im1crop = prev_image[:-int(im.shape[0]*databar_pct):decim, ::decim]*1.0
@@ -179,7 +176,8 @@ for image_name in sys.argv[1:]:
             else:
                 shiftvec_sum = shiftvec_new
                 trmatrix_sum = trmatrix_new
-        
+        print('image {} is shifted by ({:},{:}) px against the previous one and by ({:},{:}) against the first one'.format(image_name,
+                shiftvec_new[0],shiftvec_new[1], shiftvec_sum[0],shiftvec_sum[1]))
     else:
         #vshift_rel, hshift_rel, vshift_sum, hshift_sum = 0, 0, 0, 0     ## Initialize position to centre
         trmatrix_sum = np.eye(2)   ## Initialize affine transform to identity
@@ -188,7 +186,7 @@ for image_name in sys.argv[1:]:
 
     
     if is_extra(image_name):
-        extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
+        extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3]) # XXX
         paste_overlay(extra_output, np.pad(my_affine_tr(im, np.zeros(2), trmatrix_sum), pad_width=max_shift, mode='constant'), 
             int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop)) # XXX
         extra_outputs.append(extra_output)
@@ -218,15 +216,12 @@ for image_name in sys.argv[1:]:
         #vshift_sum += vshift_rel; hshift_sum += hshift_rel 
         if 'prev_image' not in locals() or consecutive_alignment: prev_image = im 
 
-
+print(composite_output.shape)
 for croppx in range(int(max(composite_output.shape)/2)):
-    if np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0):
-        #and np.all(composite_output[:,:,croppx] == 0) and np.all(composite_output[:,:,-croppx] == 0):
-        print('can crop', croppx,'px')
-    else:
+    if not (np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) \
+            and np.all(composite_output[croppx,:,:] == 0) and np.all(composite_output[-croppx,:,:] == 0)):
+        print('can crop', croppx)
         break
-#croppx = 1 #XXX
-
 
 print('saving'); t = time.time()
 
