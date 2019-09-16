@@ -68,12 +68,11 @@ def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None
         rel_smoothing_kernel = [[1]]
     laplcorr = np.abs(convolve2d(corr, rel_smoothing_kernel, mode='valid'))[cr:-2-cr,cr:-cr] # simple rel_smoothing and removing spurious last 2lines
     vsize, hsize  = laplcorr.shape
-    print(rel_smoothing_kernel)
 
     ## find optimum translation for the best image match
     raw_shifts = (np.unravel_index(np.argmax(np.abs(laplcorr)), laplcorr.shape)) # x,y coords of the minimum in the correlation map
     vshift_rel, hshift_rel = int((vsize/2 - raw_shifts[0] + 0.5)*decim), int((hsize/2 - raw_shifts[1] - 0.5)*decim) # linear transform against image centre
-    print('second image is vertically and horizontally shifted by ({:},{:}) px against the previous one'.format(vshift_rel,hshift_rel))
+    print('next image is vertically and horizontally shifted by ({:},{:}) px against the previous one'.format(vshift_rel,hshift_rel))
 
     if plot_correlation_name:
         fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15))
@@ -90,9 +89,7 @@ def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None
 def my_affine_tr(im, shiftvec, trmatrix):
     t0 = time.time()
     troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner
-    #print('shiftvec,troffset',shiftvec,troffset)
     return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
-    #print('affine tr took', time.time()-t0)
 
 def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
     """
@@ -100,25 +97,18 @@ def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
 
     im2 should always be smaller than im1, so that displacement still guarantees 100% overlap
     """
-    #print('im1.shape, im2.shape', im1.shape, im2.shape)
     shift_guess = (0, 0)
     crop_up     = int(im1.shape[0]/2-im2.shape[0]/2-shift_guess[0])
     crop_bottom = int(im1.shape[0]/2-im2.shape[0]/2+shift_guess[0]+.5)
     crop_left   = int(im1.shape[1]/2-im2.shape[1]/2-shift_guess[1])
     crop_right  = int(im1.shape[1]/2-im2.shape[1]/2+shift_guess[1]+.5)
     def fitf(p): 
-        #return -np.abs(np.sum(laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right])*my_affine_tr(im2, p.reshape(2,2))))
-        #print('p',p)
         return -np.abs(np.sum(laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right])*my_affine_tr(im2, p[:2], p[2:].reshape(2,2))))
 
-
-    print('before affine tr optimisation, image correlation =', fitf(np.array([0,0,1,0,0,1], dtype=float)))
     from scipy.optimize import differential_evolution
     m = .1 ## maximum relative affine transformation
     bounds = [(-max_shift,max_shift), (-max_shift,max_shift), (1-m, 1+m), (0-m, 0+m),(0-m, 0+m),(1-m, 1+m)]
     result = differential_evolution(fitf, bounds=bounds)
-    #print(result)
-    #print('after affine tr optimisation, image correlation =', fitf(result.x))
     return result.x[:2]*decim*.999, result.x[2:].reshape(2,2)
 
 def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
@@ -154,13 +144,12 @@ def saturate(im, saturation_enhance):
 
 
 colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in sys.argv[1:] if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
-colors = [c*np.array([1.0, 0.8, 1.4, 1]) for c in colors] ## suppress green channel
+colors = [c*np.array([1.0, 0.8, 1.2, 1]) for c in colors] ## suppress green channel
 channel_outputs, channel_names = [], []
 extra_outputs, extra_names = [], []
 for image_name in sys.argv[1:]:
     ## Load an image
     im = safe_imload(image_name)
-    print('len(colors))',len(colors), colors)
     if not is_extra(image_name): 
         color = colors[0]
         colors = colors[1:]
@@ -183,8 +172,6 @@ for image_name in sys.argv[1:]:
             shiftvec_new = find_shift(im1crop, im2crop, 
                     plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
             trmatrix_new = np.eye(2) ## no affine transform, just shifting
-            #print('correlation took', time.time()-t0)
-
         if not is_extra(image_name):
             if consecutive_alignment:
                 shiftvec_sum += shiftvec_new
@@ -202,14 +189,17 @@ for image_name in sys.argv[1:]:
     
     if is_extra(image_name):
         extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        print('shiftvec_sum', shiftvec_sum[0], shiftvec_new[0], shiftvec_sum[1], shiftvec_new[1])
-        paste_overlay(extra_output, im, int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop))
+        #paste_overlay(extra_output, np.pad(im, pad_width=max_shift, mode='constant'), 
+                #int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop))
+        paste_overlay(extra_output, np.pad(my_affine_tr(im, np.zeros(2), trmatrix_sum), pad_width=max_shift, mode='constant'), 
+            int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop)) # XXX
         extra_outputs.append(extra_output)
         extra_names.append(image_name)
     else:
         ## Process the new added image
-        im_unsharp = my_affine_tr(np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
-                np.zeros(2), trmatrix_sum) 
+        #im_unsharp = my_affine_tr(np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
+                #np.zeros(2), trmatrix_sum) 
+        im_unsharp = np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant') 
         #if 'M21S' in image_name: 
             #vshift_rel, hshift_rel = 0,0     # explicit image locking for "troubled cases"
             #im_unsharp = my_affine_tr(im_unsharp, trmatrix_sum)
