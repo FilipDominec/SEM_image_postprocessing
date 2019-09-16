@@ -28,6 +28,7 @@ Note: could generate databar like:
 rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
+#databar_pct = 0.01     ## relative height of databar at the images' bottom - to be clipped prior to correlation
 #rel_smoothing = 15./300    ## smoothing of the correlation map (not the output), relative to image width
 rel_smoothing = .01         ## smoothing of the correlation map (not the output), relative to image width
 #rel_smoothing = False      ## no smoothing of the correlation map
