@@ -14,7 +14,7 @@ I use scipy.ndimage for image processing.
 Note: could also interpret the tiff image metadata from our SEM:  
             from PIL import Image
             with Image.open('image.tif') as img:
-                img.tag[34680][0].split('\r\n')
+                img.tag[34680][0].split('\r\n')   # or use direct header loading...
 Note: could generate databar like: 
     AccV	Spot	WorkD   Magnif	DimXY		Scale: 100μm
     10 kV	6:1.2nA	13.5 mm 5000×	215×145 μm	|−−−−−|
@@ -25,13 +25,16 @@ Note: could generate databar like:
 ## User settings
 
 # correlation of images settings
-rel_max_shift=.1        ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
-decim=5        ## decimation of images prior to correlation (does not affect the results much)
-databar_pct = (61./484)   ## relative height of databar at the images' bottom - to be clipped prior to correlation
-#rel_smoothing = 15./300   ## smoothing of the correlation map (not the output), relative to image width
-rel_smoothing = .01   ## smoothing of the correlation map (not the output), relative to image width
-#rel_smoothing = False   ## no smoothing of the correlation map
-plot_correlation  = 1 ## diagnostics
+rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
+decim=2                     ## decimation of images prior to correlation (does not affect the results much)
+databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
+#rel_smoothing = 15./300    ## smoothing of the correlation map (not the output), relative to image width
+rel_smoothing = .01         ## smoothing of the correlation map (not the output), relative to image width
+#rel_smoothing = False      ## no smoothing of the correlation map
+plot_correlation  = False    ## diagnostics
+consecutive_alignment = True ## if disabled, images are aligned always to the first one
+
+use_affine_transform = False ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 
 # Image post-processing settings
 channel_exponent = 1. ## pixelwise exponentiation of image
@@ -59,12 +62,13 @@ def find_shift(im1, im2, rel_smoothing=rel_smoothing, plot_correlation_name=None
     corr = correlate2d(laplace(im1), im2, mode='valid')
     cr=1  # post-laplace cropping, there were some edge artifacts
     if rel_smoothing:
-        rel_smoothing_kernel = np.outer(2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing))**2), 2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing))**2))
+        rel_smoothing_kernel = np.outer(2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing)+1)**2), 2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing)+1)**2))
         rel_smoothing_kernel /= np.sum(rel_smoothing_kernel)
     else:
         rel_smoothing_kernel = [[1]]
     laplcorr = np.abs(convolve2d(corr, rel_smoothing_kernel, mode='valid'))[cr:-2-cr,cr:-cr] # simple rel_smoothing and removing spurious last 2lines
     vsize, hsize  = laplcorr.shape
+    print(rel_smoothing_kernel)
 
     ## find optimum translation for the best image match
     raw_shifts = (np.unravel_index(np.argmax(np.abs(laplcorr)), laplcorr.shape)) # x,y coords of the minimum in the correlation map
@@ -110,21 +114,20 @@ def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
 
     print('before affine tr optimisation, image correlation =', fitf(np.array([0,0,1,0,0,1], dtype=float)))
     from scipy.optimize import differential_evolution
-    maxtr = .1
-    print(max_shift)
-    bounds = [(-max_shift,max_shift), (-max_shift,max_shift), (1-maxtr, 1+maxtr), (0-maxtr, 0+maxtr),(0-maxtr, 0+maxtr),(1-maxtr, 1+maxtr)]
+    m = .1 ## maximum relative affine transformation
+    bounds = [(-max_shift,max_shift), (-max_shift,max_shift), (1-m, 1+m), (0-m, 0+m),(0-m, 0+m),(1-m, 1+m)]
     result = differential_evolution(fitf, bounds=bounds)
-    print(result)
-    print('after affine tr optimisation, image correlation =', fitf(result.x))
-
+    #print(result)
+    #print('after affine tr optimisation, image correlation =', fitf(result.x))
     return result.x[:2]*decim*.999, result.x[2:].reshape(2,2)
 
 def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
     #extend_symmetric(composite_output, im.shape[0]+vshift_sum, im.shape[1]+hshift_sum)
     for channel in range(3):
         bgimage[image_padding-vs:image_padding+fgimage.shape[0]-vs, 
-                image_padding-hs:image_padding+fgimage.shape[1]-hs, channel] += \
-                np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
+                image_padding-hs:image_padding+fgimage.shape[1]-hs, 
+                channel] += fgimage**channel_exponent*float(color[channel]) 
+        #np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
 
 
 ## Image manipulation routines
@@ -132,15 +135,17 @@ def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
 def safe_imload(imname):
     im = imageio.imread(imname.lstrip('+')) * 1.0  # plus sign has a special meaning of an 'extra' image
     if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
-    return im, (imname[0] == '+' or ('SC' in imname))
+    return im
+def is_extra(imname): return (imname[0] == '+' or ('S' in imname)) ## TODO this should be better defined...
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     unsharp_kernel = np.outer(2**-(np.linspace(-2,2,radius)**2), 2**-(np.linspace(-2,2,radius2 if radius2 else radius)**2))
     unsharp_kernel /= np.sum(unsharp_kernel)
-    if len(np.shape(im)) == 3:
+    if len(np.shape(im)) == 3:      # handle channels of colour image separately
         unsharp = np.dstack([convolve2d(channel, unsharp_kernel, mode='same', boundary='symm') for channel in im])
     else:
         unsharp = convolve2d(im, unsharp_kernel, mode='same', boundary='symm')
-    im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
+    #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
+    im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*5/im.size )
     return im
 def saturate(im, saturation_enhance):
     monochr = np.dstack([np.sum(im, axis=2)]*3)
@@ -148,12 +153,16 @@ def saturate(im, saturation_enhance):
 
 
 
-colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len(sys.argv)-1))   ## Generate a nice rainbow scale
+colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.15, 1, len([s for s in sys.argv[1:] if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
 channel_outputs, channel_names = [], []
 extra_outputs, extra_names = [], []
-for image_name, color in zip(sys.argv[1:], colors):
+for image_name in sys.argv[1:]:
     ## Load an image
-    im, is_extra = safe_imload(image_name)
+    im = safe_imload(image_name)
+    print('len(colors))',len(colors), colors)
+    if not is_extra(image_name): 
+        color = colors[0]
+        colors = colors[1:]
     max_shift = int(rel_max_shift*im.shape[0])
     image_padding = max_shift*len(sys.argv[1:]) ## FIXME safe very wide black padding, could be optimized!
 
@@ -163,28 +172,37 @@ for image_name, color in zip(sys.argv[1:], colors):
     if 'prev_image' in locals():    
         im1crop = prev_image[:-int(im.shape[0]*databar_pct):decim, ::decim]*1.0
 
-        ## Find the best correlation of both images
-        #t0 = time.time()
-        #vshift_rel, hshift_rel = find_shift(im1crop, im2crop, 
-                #plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
-        #print('correlation took', time.time()-t0)
+        if use_affine_transform: 
+            ## Find the optimum affine transform of both images
+            shiftvec_new, trmatrix_new = find_affine(im1crop, im2crop, (0, 0), np.eye(2), verbose=True)
+        else:
+            ## Find the best correlation of both images by brute-force search
+            #t0 = time.time()
+            #vshift_rel, hshift_rel = find_shift(im1crop, im2crop, 
+            shiftvec_new = find_shift(im1crop, im2crop, 
+                    plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
+            trmatrix_new = np.eye(2) ## no affine transform, just shifting
+            #print('correlation took', time.time()-t0)
 
-        ## Find the optimum affine transform of both images
-        shiftvec_new, trmatrix_new = find_affine(im1crop, im2crop, (0, 0), np.eye(2), verbose=True) 
-
-        shiftvec_sum += shiftvec_new
-        trmatrix_sum += trmatrix_new - np.eye(2)
+        if not is_extra(image_name):
+            if consecutive_alignment:
+                shiftvec_sum += shiftvec_new
+                trmatrix_sum += trmatrix_new - np.eye(2) # or... trmatrix_new.dot(trmatrix_sum) ? 
+            else:
+                shiftvec_sum = shiftvec_new
+                trmatrix_sum = trmatrix_new
         
     else:
-        vshift_rel, hshift_rel, vshift_sum, hshift_sum = 0, 0, 0, 0     ## Initialize position to centre
+        #vshift_rel, hshift_rel, vshift_sum, hshift_sum = 0, 0, 0, 0     ## Initialize position to centre
         trmatrix_sum = np.eye(2)   ## Initialize affine transform to identity
         shiftvec_sum = np.zeros(2) ## Initialize image shift
 
 
     
-    if is_extra:
+    if is_extra(image_name):
         extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        paste_overlay(extra_output, im, vshift_sum+vshift_rel, hshift_sum+hshift_rel, [1,1,1,1], normalize=np.max(im2crop))
+        print('shiftvec_sum', shiftvec_sum[0], shiftvec_new[0], shiftvec_sum[1], shiftvec_new[1])
+        paste_overlay(extra_output, im, int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop))
         extra_outputs.append(extra_output)
         extra_names.append(image_name)
     else:
@@ -208,15 +226,15 @@ for image_name, color in zip(sys.argv[1:], colors):
         channel_names.append(image_name)
 
         ## Remember the new transform, and store the image as a background for fitting of the next one
-        vshift_sum += vshift_rel; hshift_sum += hshift_rel 
-        prev_image = im
+        #vshift_sum += vshift_rel; hshift_sum += hshift_rel 
+        if 'prev_image' not in locals() or consecutive_alignment: prev_image = im 
 
 print('saving'); t = time.time()
 
 #imageio.imsave('composite_' + '.png', composite_output)
-for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): imageio.imsave('channel' + str(n) + '_'+f.split('.')[0]+'.png', i)
+for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): imageio.imsave('channel{:02d}_'.format(n) + f.split('.')[0]+'.png', i)
 print('saving2')
-for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): imageio.imsave('extra' + str(n)+ '_'+f.lstrip('+').split('.')[0]+ '.png', i)
+for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): imageio.imsave('extra{:02d}_'.format(n) + f.lstrip('+').split('.')[0]+ '.png', i)
 print('done saving, took ', time.time()-t )
 imageio.imsave('composite_saturate' + '.png', saturate(composite_output, saturation_enhance=saturation_enhance))
 imageio.imsave('composite.png', composite_output)
