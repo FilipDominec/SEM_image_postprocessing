@@ -220,6 +220,16 @@ for image_name in sys.argv[1:]:
         #vshift_sum += vshift_rel; hshift_sum += hshift_rel 
         if 'prev_image' not in locals() or consecutive_alignment: prev_image = im 
 
+
+for croppx in range(int(max(composite_output.shape)/2)):
+    print(composite_output[:,croppx,:])
+    if np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) and \
+            np.all(composite_output[:,:,croppx] == 0) and np.all(composite_output[:,:,-croppx] == 0):
+        print('can crop', croppx,'px')
+    else:
+        break
+
+
 print('saving'); t = time.time()
 
 #imageio.imsave('composite_' + '.png', composite_output)
