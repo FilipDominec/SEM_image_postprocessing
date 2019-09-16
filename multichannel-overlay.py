@@ -1,20 +1,22 @@
 #!/usr/bin/python3  
 #-*- coding: utf-8 -*-
 """
+Multichannel overlay
 
-todo: test on '/home/dominecf/LIMBA/SEM-dle_data_obsolentni/2019/06cerven/190613_319B_254A-FH/319B-FH-190613'
-and '/home/dominecf/LIMBA/SEM-dle_cisla_vzorku/2019/283C_FH-190317_190611/283C_190611'
+    * Automatically aligns images so that the features are matched.  
+    * Optionally, affine transform can be used for images that are slightly distorted. 
+    * Exports the coloured composite image as well as each channel separately. 
+    * Likewise, "extra" images can be aligned and exported (in grayscale) as well, but do not affect further alignment.
 
-todo: 
-    np.pad(aa, mode='constant', pad_width=[[1,2],[3,4]])
-    np.all(aa[1] == 5)
-
-I use scipy.ndimage for image processing.
-
-Note: could also interpret the tiff image metadata from our SEM:  
-            from PIL import Image
-            with Image.open('image.tif') as img:
-                img.tag[34680][0].split('\r\n')   # or use direct header loading...
+TODOs: 
+    * there is some colour mismatch between affine-tr and normal operation, why?
+    * colors are still not as crisp as they used to be (too aggressive clipping, or clipping channels too early?)
+    * interactive GUI D&D application
+    * test on windows
+    * could also interpret the tiff image metadata from our SEM:  
+                from PIL import Image
+                with Image.open('image.tif') as img:
+                    img.tag[34680][0].split('\r\n')   # or use direct header loading...
 Note: could generate databar like: 
     AccV	Spot	WorkD   Magnif	DimXY		Scale: 100μm
     10 kV	6:1.2nA	13.5 mm 5000×	215×145 μm	|−−−−−|
@@ -117,8 +119,8 @@ def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
         bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
-                channel] += fgimage**channel_exponent*float(color[channel]) 
-        #np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
+                channel] += np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
+                #fgimage**channel_exponent*float(color[channel]) 
 
 
 ## Image manipulation routines
@@ -187,9 +189,9 @@ for image_name in sys.argv[1:]:
 
     
     if is_extra(image_name):
-        extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3]) # XXX
+        extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3]) 
         paste_overlay(extra_output, np.pad(my_affine_tr(im, np.zeros(2), trmatrix_sum), pad_width=max_shift, mode='constant'), 
-            int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop)) # XXX
+            int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop)) 
         extra_outputs.append(extra_output)
         extra_names.append(image_name)
     else:
