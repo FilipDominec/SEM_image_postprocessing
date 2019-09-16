@@ -35,7 +35,7 @@ rel_smoothing = .01         ## smoothing of the correlation map (not the output)
 plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 
-use_affine_transform = False ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+use_affine_transform = True ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 
 # Image post-processing settings
 channel_exponent = 1. ## pixelwise exponentiation of image
@@ -194,9 +194,11 @@ for image_name in sys.argv[1:]:
         extra_names.append(image_name)
     else:
         ## Process the new added image
-        #im_unsharp = my_affine_tr(np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
-                #np.zeros(2), trmatrix_sum) 
-        im_unsharp = np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant') 
+        if use_affine_transform:
+            im_unsharp = my_affine_tr(np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
+                    np.zeros(2), trmatrix_sum) 
+        else:
+            im_unsharp = np.pad(unsharp_mask(im, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant') 
         #if 'M21S' in image_name: 
             #vshift_rel, hshift_rel = 0,0     # explicit image locking for "troubled cases"
             #im_unsharp = my_affine_tr(im_unsharp, trmatrix_sum)
