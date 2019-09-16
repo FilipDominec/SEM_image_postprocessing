@@ -27,7 +27,8 @@ Note: could generate databar like:
 # correlation of images settings
 rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (does not affect the results much)
-databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
+#databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
+databar_pct = 0.01     ## relative height of databar at the images' bottom - to be clipped prior to correlation
 #rel_smoothing = 15./300    ## smoothing of the correlation map (not the output), relative to image width
 rel_smoothing = .01         ## smoothing of the correlation map (not the output), relative to image width
 #rel_smoothing = False      ## no smoothing of the correlation map
@@ -112,7 +113,6 @@ def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
     return result.x[:2]*decim*.999, result.x[2:].reshape(2,2)
 
 def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
-    #extend_symmetric(composite_output, im.shape[0]+vshift_sum, im.shape[1]+hshift_sum)
     for channel in range(3):
         bgimage[image_padding-vs:image_padding+fgimage.shape[0]-vs, 
                 image_padding-hs:image_padding+fgimage.shape[1]-hs, 
@@ -158,20 +158,20 @@ for image_name in sys.argv[1:]:
 
     from scipy.ndimage.filters import  gaussian_filter
     im2crop = gaussian_filter(im, sigma=decim*.5)[max_shift:-max_shift-int(im.shape[0]*databar_pct):decim, max_shift:-max_shift:decim]*1.0
+    print('im.shape', im.shape)
+    print('im2crop.shape', im2crop.shape)
 
     if 'prev_image' in locals():    
         im1crop = prev_image[:-int(im.shape[0]*databar_pct):decim, ::decim]*1.0
 
         if use_affine_transform: 
-            ## Find the optimum affine transform of both images
+            ## Find the optimum affine transform of both images (by fitting)
             shiftvec_new, trmatrix_new = find_affine(im1crop, im2crop, (0, 0), np.eye(2), verbose=True)
         else:
             ## Find the best correlation of both images by brute-force search
-            #t0 = time.time()
-            #vshift_rel, hshift_rel = find_shift(im1crop, im2crop, 
-            shiftvec_new = find_shift(im1crop, im2crop, 
-                    plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
+            shiftvec_new = find_shift(im1crop, im2crop, plot_correlation_name=image_name.rsplit('.')[0] + '_correlation.png' if plot_correlation else None)
             trmatrix_new = np.eye(2) ## no affine transform, just shifting
+
         if not is_extra(image_name):
             if consecutive_alignment:
                 shiftvec_sum += shiftvec_new
@@ -189,8 +189,6 @@ for image_name in sys.argv[1:]:
     
     if is_extra(image_name):
         extra_output = np.zeros([im.shape[0]+2*image_padding, im.shape[1]+2*image_padding, 3])
-        #paste_overlay(extra_output, np.pad(im, pad_width=max_shift, mode='constant'), 
-                #int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop))
         paste_overlay(extra_output, np.pad(my_affine_tr(im, np.zeros(2), trmatrix_sum), pad_width=max_shift, mode='constant'), 
             int(shiftvec_sum[0] + shiftvec_new[0]), int(shiftvec_sum[1] + shiftvec_new[1]), [1,1,1,1], normalize=np.max(im2crop)) # XXX
         extra_outputs.append(extra_output)
@@ -222,24 +220,21 @@ for image_name in sys.argv[1:]:
 
 
 for croppx in range(int(max(composite_output.shape)/2)):
-    print( np.all(composite_output[:,croppx,:] == 0), np.all(composite_output[:,-croppx,:] == 0), \
-            np.all(composite_output[:,:,croppx] == 0), np.all(composite_output[:,:,-croppx] == 0)
-
-    if np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) and \
-            np.all(composite_output[:,:,croppx] == 0) and np.all(composite_output[:,:,-croppx] == 0):
+    if np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0):
+        #and np.all(composite_output[:,:,croppx] == 0) and np.all(composite_output[:,:,-croppx] == 0):
         print('can crop', croppx,'px')
     else:
         break
+#croppx = 1 #XXX
 
 
 print('saving'); t = time.time()
 
 #imageio.imsave('composite_' + '.png', composite_output)
-for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): imageio.imsave('channel{:02d}_'.format(n) + f.split('.')[0]+'.png', i)
-print('saving2')
-for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): imageio.imsave('extra{:02d}_'.format(n) + f.lstrip('+').split('.')[0]+ '.png', i)
+for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): imageio.imsave('channel{:02d}_'.format(n) + f.split('.')[0]+'.png', i[croppx:-croppx,croppx:-croppx,:])
+for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): imageio.imsave('extra{:02d}_'.format(n) + f.lstrip('+').split('.')[0]+ '.png', i[croppx:-croppx,croppx:-croppx,:])
 print('done saving, took ', time.time()-t )
-imageio.imsave('composite_saturate' + '.png', saturate(composite_output, saturation_enhance=saturation_enhance))
-imageio.imsave('composite.png', composite_output)
+imageio.imsave('composite_saturate' + '.png', saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave('composite.png', composite_output[croppx:-croppx,croppx:-croppx,:])
 
 
