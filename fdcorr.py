@@ -222,7 +222,9 @@ for image_name in sys.argv[1:]:
 
 
 for croppx in range(int(max(composite_output.shape)/2)):
-    print(composite_output[:,croppx,:])
+    print( np.all(composite_output[:,croppx,:] == 0), np.all(composite_output[:,-croppx,:] == 0), \
+            np.all(composite_output[:,:,croppx] == 0), np.all(composite_output[:,:,-croppx] == 0)
+
     if np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) and \
             np.all(composite_output[:,:,croppx] == 0) and np.all(composite_output[:,:,-croppx] == 0):
         print('can crop', croppx,'px')
