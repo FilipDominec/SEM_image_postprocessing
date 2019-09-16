@@ -123,10 +123,10 @@ def find_affine(im1, im2, shift_guess, trmatrix_guess, verbose=False):
 
 def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
     #extend_symmetric(composite_output, im.shape[0]+vshift_sum, im.shape[1]+hshift_sum)
-    for channel, channel_weight in zip(range(3),(1,.75,1.25)):
+    for channel in range(3):
         bgimage[image_padding-vs:image_padding+fgimage.shape[0]-vs, 
                 image_padding-hs:image_padding+fgimage.shape[1]-hs, 
-                channel] += fgimage**channel_exponent*float(color[channel])*channel_weight 
+                channel] += fgimage**channel_exponent*float(color[channel]) 
         #np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
 
 
@@ -154,6 +154,7 @@ def saturate(im, saturation_enhance):
 
 
 colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in sys.argv[1:] if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
+colors = [c*np.array([1.0, 0.8, 1.4, 1]) for c in colors] ## suppress green channel
 channel_outputs, channel_names = [], []
 extra_outputs, extra_names = [], []
 for image_name in sys.argv[1:]:
