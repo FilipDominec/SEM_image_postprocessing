@@ -46,13 +46,14 @@ def im_logo(im, logo_img, x, y, color=1):
 
 #imname = 'test283/channel0_10L415A.png'
 #imname = 'test283/10L415A.TIF'
-imname = '/home/dominecf/LIMBA/SEM-dle_cisla_vzorku/2019/319B-FH-190613_190625/10M460C.TIF'
+#imname = '/home/dominecf/LIMBA/SEM-dle_cisla_vzorku/2019/319B-FH-190613_190625/10M460C.TIF'
+imname = '/home/dominecf/LIMBA/SEM-dle_cisla_vzorku/2019/319B-FH-190613_190625/10NSA.TIF'
 
 ## Analyze the TIFF image header specific for Philips/FEI 30XL
 with open(imname, encoding = "ISO-8859-1") as of: 
     ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-for par in ('flAccV', 'flSpot', 'lDetName', 'flWD', 'Magnification', 'SizeX', 'SizeY'):
-    print(par, '=', ih[par])
+#for par in ('flAccV', 'flSpot', 'lDetName', 'flWD', 'Magnification', 'SizeX', 'SizeY'):
+    #print(par, '=', ih[par])
 
 
 
@@ -62,7 +63,7 @@ im = imageio.imread(imname)
 #logo_im = imageio.imread('logo2.png') # test
 logo_im = imageio.imread('logo_rgb.png') # test
 
-size_x = 117500. / float(ih['Magnification']) / 300
+size_x = 117500. / float(ih['Magnification']) * .6
 size_y = size_x / 1424*968  / .91 
 if size_x > 1000: 
     size_str = '{:<4f}'.format(size_x/1000)[:4] + 'x' + '{:<4f}'.format(size_y/1000)[:4] + ' mm'
@@ -73,9 +74,9 @@ else:
 
 def putscale(im, x,y,h, xw):
     white = 255 if len(im.shape) == 2 else np.ones(im.shape[2])*255
-    im[y:y+h+1,                     x-1:x+2,     ] = white
-    im[y:y+h+1,                     x-1+xw:x+2+xw] = white
-    im[y+int(h/2)-1:y+int(h/2)+2,   x-1:x+2+xw] = white
+    im[y+2:y+h-2,                     x-1:x+1,     ] = white
+    im[y+2:y+h-2,                     x-1+xw:x+1+xw] = white
+    im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = white
     return im
 
 def round125(n):
@@ -84,28 +85,35 @@ def round125(n):
     if mant > 5: return 5
     if mant > 2: return 2
     return 1
+scale_bar = round125(size_x/5) # in μm
 
 
 
 
-
-print(logo_im.shape)
+#print(im.shape)
 im = scipy.ndimage.zoom(im, [1./.91] + [1]*(len(im.shape)-1))
-xpos = logo_im.shape[1]+10
+im -= np.min(im)
+print(np.max(im[:int(im.shape[0]*.8),:]))
+im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
 
-im = putscale(im, 100, 100, ch, 50)
+print(np.max(im[:int(im.shape[0]*.8),:]))
+xpos = logo_im.shape[1]+10 if im.shape[1]>1200 else 0
+
+sample_name = '' # TODO ...
+author_name = '' # TODO ...
 
 im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
 im = im_logo(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
 im = im_print(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-    'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale: ', '100μm'), x=xpos, y=im.shape[0]-ch*4, color=.6)
+    'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale: {:<.0f} μm'.format(scale_bar)), x=xpos, y=im.shape[0]-ch*4, color=.6)
 im = im_print(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
     float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
     '{:<.0f}'.format(float(ih['Magnification']))+'x', 
     size_str), x=xpos, y=im.shape[0]-ch*3, color=1)
 im = im_print(im, '{:<13} {:<13} {:<13}'.format('Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, color=.6)
-im = im_print(im, '{:<13} {:<13} {:<13}'.format(ih['lDetName'], time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), '234A'), x=xpos, y=im.shape[0]-ch, color=1)
-im = im_print(im, 'www.fzu.cz/~movpe', x=98, y=im.shape[0]-ch, color=.6)
+im = im_print(im, '{:<13} {:<13} {:<13}'.format(ih['lDetName'], time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), sample_name), x=xpos, y=im.shape[0]-ch, color=1)
+if im.shape[1]> 1200: im = im_print(im, 'www.fzu.cz/~movpe', x=98, y=im.shape[0]-ch, color=.6)
+im = putscale(im, xpos+465, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
     
 
 imageio.imsave('out.png', im)
