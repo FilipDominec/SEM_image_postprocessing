@@ -56,14 +56,13 @@ with open(imname, encoding = "ISO-8859-1") as of:
     #print(par, '=', ih[par])
 
 
-
 im = imageio.imread(imname)
 
 
 #logo_im = imageio.imread('logo2.png') # test
 logo_im = imageio.imread('logo_rgb.png') # test
 
-size_x = 117500. / float(ih['Magnification']) * .6
+size_x = 117500. / float(ih['Magnification']) 
 size_y = size_x / 1424*968  / .91 
 if size_x > 1000: 
     size_str = '{:<4f}'.format(size_x/1000)[:4] + 'x' + '{:<4f}'.format(size_y/1000)[:4] + ' mm'
@@ -80,13 +79,18 @@ def putscale(im, x,y,h, xw):
     return im
 
 def round125(n):
-    expo = 10**np.trunc(np.log10(n))
+    expo = 10**np.floor(np.log10(n))
     mant = n/expo
-    if mant > 5: return 5
-    if mant > 2: return 2
-    return 1
+    if mant > 5: return 5*expo
+    if mant > 2: return 2*expo
+    return 1*expo
 scale_bar = round125(size_x/5) # in μm
-
+if scale_bar > 1000:
+    scale_num, scale_unit = scale_bar / 1000, 'mm' 
+elif scale_bar < 1:
+    scale_num, scale_unit = scale_bar * 1000, 'nm' 
+else:
+    scale_num, scale_unit = scale_bar,        'μm' 
 
 
 
@@ -99,19 +103,24 @@ im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
 print(np.max(im[:int(im.shape[0]*.8),:]))
 xpos = logo_im.shape[1]+10 if im.shape[1]>1200 else 0
 
-sample_name = '' # TODO ...
-author_name = '' # TODO ...
+
+sample_name, author_name = os.path.basename(os.path.dirname(imname)).replace('-','_').split('_')[:2]
+detectors = {'0': 'SE', '3':'CL'}
 
 im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
 im = im_logo(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
 im = im_print(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-    'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale: {:<.0f} μm'.format(scale_bar)), x=xpos, y=im.shape[0]-ch*4, color=.6)
+    'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, color=.6)
+im = im_print(im, '{:<.0f} {:}'.format(scale_num, scale_unit), x=xpos+550, y=im.shape[0]-ch*4, color=1)
 im = im_print(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
     float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
     '{:<.0f}'.format(float(ih['Magnification']))+'x', 
     size_str), x=xpos, y=im.shape[0]-ch*3, color=1)
 im = im_print(im, '{:<13} {:<13} {:<13}'.format('Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, color=.6)
-im = im_print(im, '{:<13} {:<13} {:<13}'.format(ih['lDetName'], time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), sample_name), x=xpos, y=im.shape[0]-ch, color=1)
+im = im_print(im, '{:<13} {:<13} {:<13}'.format(
+    detectors.get(ih['lDetName'],''), 
+    author_name+time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), 
+    sample_name), x=xpos, y=im.shape[0]-ch, color=1)
 if im.shape[1]> 1200: im = im_print(im, 'www.fzu.cz/~movpe', x=98, y=im.shape[0]-ch, color=.6)
 im = putscale(im, xpos+465, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
     
