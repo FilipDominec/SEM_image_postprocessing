@@ -1,31 +1,24 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
-"""
-    * could also interpret the tiff image metadata from our SEM:  
-                from PIL import Image
-                with Image.open('image.tif') as img:
-                    img.tag[34680][0].split('\r\n')   # or use direct header loading...
-Note: could generate databar like: 
-"""
 
 import numpy as np
-import sys, os, time, collections, imageio
+import sys, os, time, collections, imageio, warnings
 import scipy.ndimage
-
-## USER SETTINGS:
+warnings.filterwarnings("ignore")
 
 ## General image-manipulation routines
 def match_wb_and_color(im1, im2): 
-    ''' Allows to put a grayscale image in a colourful one, and vice versa (in which case it is converted to grays) '''
+    ''' Converts grayscale image 'im2' into a colourful one, and vice versa (the color mode of 'im1' being followed) '''
     if len(im2.shape) > len(im1.shape): im2 = im2[:,:,0] ## reduce channel depth if needed
     if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*3)
     return im2
 
 ## Font overlay routines
+def inmydir(fn): return os.path.join(os.path.dirname(os.path.realpath(__file__)), fn) # finds the basename in the script's dir
 typecase_str = ''.join([chr(c) for c in list(range(32,127))+list(range(0x391,0x3a2))+list(range(0x3a3, 0x3aa))+\
     list(range(0x3b1,0x3c2))+list(range(0x3c3,0x3ca))+[0xd7]]) # basic ASCII table + greek 
-try: typecase_img = imageio.imread('typecase.png')
+try: typecase_img = imageio.imread(inmydir('typecase.png'))
 except FileNotFoundError:
     print('No type set found. To generate one: \n\t1. make a screenshot, \n\t2. convert it to grayscale, '+\
             '\n\t3. crop the text between delimiting blocks and \n\t 4. save it in this folder as typecase.png')
@@ -61,65 +54,74 @@ def putscale(im, x, y, h, xw):
     im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = white
     return im
 
-logo_im = imageio.imread('logo.png') # test
+logo_im = imageio.imread(inmydir('logo.png')) # test
 
 
 ## Load images
 for imname in sys.argv[1:]:
-    im = imageio.imread(imname)
+    try:
+        im = imageio.imread(imname)
 
-    ## Analyze the TIFF image header specific for Philips/FEI 30XL
-    with open(imname, encoding = "ISO-8859-1") as of: 
-        ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+        ## Analyze the TIFF image header specific for Philips/FEI 30XL
+        with open(imname, encoding = "ISO-8859-1") as of: 
+            ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
 
-    ## Preprocess the parameters
-    anisotropy = .91
-    size_x = 117500. / float(ih['Magnification']) /1.03
-    size_y = size_x / im.shape[1] * im.shape[0]  / anisotropy
-    if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
-    elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
-    else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
-    detectors = {'0': 'SE', '3':'CL'}
+        ## Preprocess the parameters
+        anisotropy = .91
+        size_x = 117500. / float(ih['Magnification']) /1.03
+        size_y = size_x / im.shape[1] * im.shape[0]  / anisotropy
+        if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
+        elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
+        else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
+        detectors = {'0': 'SE', '3':'CL'}
 
-    try: sample_name, author_name = os.path.basename(os.path.dirname(imname)).replace('-','_').split('_')[:2]
-    except ValueError: sample_name, author_name = '', ''
+        try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).replace('-','_').split('_')[:2]
+        except ValueError: sample_name, author_name = '', ''
+        if not sample_name:
+            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).replace('-','_').split('_')[:2]
+            except ValueError: sample_name, author_name = '', ''
 
-    ## Prepare the scale bar
-    scale_bar = round125(size_x/4.8) # in μm
-    if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
-    elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
-    else:                    scale_num, scale_unit = scale_bar,        'μm' 
+        ## Prepare the scale bar
+        scale_bar = round125(size_x/4.8) # in μm
+        if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
+        elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
+        else:                    scale_num, scale_unit = scale_bar,        'μm' 
 
-    ## Normalize image
-    im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
-    im -= np.min(im)
-    im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
+        ## Rescale image and, if in SE-mode, normalize it
+        im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
+
+        if detectors.get(ih['lDetName'],'')  not in ('CL',):
+            im -= np.min(im[:int(im.shape[0]*.8),:])
+            im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
 
 
-    ## Put the logo & web on the image
-    im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
-    im = im_logo(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
-    xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-    if xpos > 0: im = im_print(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, color=.6)
+        ## Put the logo & web on the image
+        im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
+        im = im_logo(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
+        xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
+        if xpos > 0: im = im_print(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, color=.6)
 
-    ## Print the first couple of rows
-    im = im_print(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-        'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, color=.6)
-    im = im_print(im, '{:<.0f} {:}'.format(
-        scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, color=1)
-    im = putscale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
+        ## Print the first couple of rows
+        im = im_print(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
+            'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, color=.6)
+        im = im_print(im, '{:<.0f} {:}'.format(
+            scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, color=1)
+        im = putscale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
 
-    ## Print the second couple of rows
-    im = im_print(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
-        float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
-        '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-        size_str), x=xpos, y=im.shape[0]-ch*3, color=1)
-    im = im_print(im, '{:<13} {:<13} {:<13}'.format(
-        'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, color=.6)
-    im = im_print(im, '{:<13} {:<13} {:<13}'.format(
-        detectors.get(ih['lDetName'],''), 
-        author_name+time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), 
-        sample_name), x=xpos, y=im.shape[0]-ch, color=1)
-        
-    outname = os.path.splitext(imname)[0]+'.png'
-    if not os.path.isfile(outname): imageio.imsave(outname, im)
+        ## Print the second couple of rows
+        im = im_print(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
+            float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
+            '{:<.0f}'.format(float(ih['Magnification']))+'×', 
+            size_str), x=xpos, y=im.shape[0]-ch*3, color=1)
+        im = im_print(im, '{:<13} {:<13} {:<13}'.format(
+            'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, color=.6)
+        im = im_print(im, '{:<13} {:<13} {:<13}'.format(
+            detectors.get(ih['lDetName'],''), 
+            author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), 
+            sample_name), x=xpos, y=im.shape[0]-ch, color=1)
+            
+        outname = os.path.splitext(imname)[0]+'.png'
+        if not os.path.isfile(outname): imageio.imsave(outname, im)
+    except Exception as e: 
+        print('Error: image {:} skipped: \n\n'.format(imname), e)
+
