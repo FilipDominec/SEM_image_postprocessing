@@ -14,7 +14,7 @@ def match_wb_and_color(im1, im2):
     return im2
 
 ## Font overlay routines
-def inmydir(fn): return pathlib.Path(__file__).resolve().parent / fn # finds the basename in the script's dir
+def inmydir(fn): return pathlib.Path(__file__).resolve()/'..'/fn # finds the basename in the script's dir
 typecase_str = ''.join([chr(c) for c in list(range(32,127))+list(range(0x391,0x3a2))+list(range(0x3a3, 0x3aa))+\
     list(range(0x3b1,0x3c2))+list(range(0x3c3,0x3ca))+[0xd7]]) # basic ASCII table + greek 
 try: 
