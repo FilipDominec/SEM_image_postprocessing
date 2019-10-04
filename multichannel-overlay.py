@@ -3,25 +3,20 @@
 """
 Multichannel overlay
 
-    * Automatically aligns images so that the features are matched.  
-    * Optionally, affine transform can be used for images that are slightly distorted. 
-    * Exports the coloured composite image as well as each channel separately. 
-    * Likewise, "extra" images can be aligned and exported (in grayscale) as well, but do not affect further alignment.
+    * Automatically aligns images so that their edge features are matched. (Technically, it maximizes abs value of Laplacians.)
+    * Optionally, affine transform can be used for better matching images that are rotated or slightly distorted. 
+    * Exports the coloured composite image, along with each channel separately. 
+    * Additionally, "extra" images can be aligned and exported in grayscale, but they do not affect further alignment of channels. 
+      This can be used, e.g., to align SEM images to a series of spectrally resolved cathodoluminescence mappings.
 
 TODOs: 
-    * there is some colour mismatch between affine-tr and normal operation, why?
-    * colors are still not as crisp as they used to be (too aggressive clipping, or clipping channels too early?)
+    * put image-manip routines into a separate module
+    * join the export with annotate.py
+    * don't forget to anisotropically scale at the load time
+    * (too aggressive clipping, or clipping channels too early?) colors are still not as crisp as they used to be 
+    * is there some colour mismatch between affine-tr and normal operation?
     * interactive GUI D&D application
     * test on windows
-    * could also interpret the tiff image metadata from our SEM:  
-                from PIL import Image
-                with Image.open('image.tif') as img:
-                    img.tag[34680][0].split('\r\n')   # or use direct header loading...
-Note: could generate databar like: 
-    AccV	Spot	WorkD   Magnif	DimXY		Scale: 100μm
-    10 kV	6:1.2nA	13.5 mm 5000×	215×145 μm	|−−−−−|
-    Det		Made			Sample name
-    CL400nm	FD 2019-07-26	323B edge
 """
 
 ## User settings
@@ -37,10 +32,10 @@ rel_smoothing = .01         ## smoothing of the correlation map (not the output)
 plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 
-use_affine_transform = True ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+use_affine_transform = False ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 
 # Image post-processing settings
-channel_exponent = 1. ## pixelwise exponentiation of image
+channel_exponent = 1. ## pixelwise exponentiation of image (like gamma curve)
 saturation_enhance = .15
 unsharp_weight = 2 #2
 unsharp_radius = 30
