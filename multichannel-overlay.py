@@ -37,7 +37,7 @@ rel_smoothing = .01         ## smoothing of the correlation map (not the output)
 plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 
-use_affine_transform = True ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+use_affine_transform = False ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 
 # Image post-processing settings
 channel_exponent = 1. ## pixelwise exponentiation of image
