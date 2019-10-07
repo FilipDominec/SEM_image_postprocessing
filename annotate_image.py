@@ -42,7 +42,7 @@ def im_logo(im, logo_img, x, y, color=1):
     return im
 
 
-logo_im = imageio.imread('logo_rgb.png') # test
+logo_im = imageio.imread('logo.png') # test
 
 
 ## (microscope-dependent settings)
