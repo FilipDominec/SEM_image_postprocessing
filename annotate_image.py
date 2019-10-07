@@ -66,7 +66,7 @@ logo_im = imageio.imread(inmydir('logo.png')) # test
 
 ## Load images
 for imname in sys.argv[1:]:
-    #try:
+    try:
         im = imageio.imread(imname)
 
         ## Analyze the TIFF image header specific for Philips/FEI 30XL
@@ -133,6 +133,6 @@ for imname in sys.argv[1:]:
             
         outname = os.path.splitext(imname)[0]+'.png'
         if not os.path.isfile(outname): imageio.imsave(outname, im)
-    #except Exception as e: 
-        #print('Error: image {:} skipped: \n\n'.format(imname), e)
+    except Exception as e: 
+        print('Error: image {:} skipped: \n\n'.format(imname), e)
 
