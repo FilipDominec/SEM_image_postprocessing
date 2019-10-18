@@ -38,6 +38,7 @@ rel_smoothing = .01         ## smoothing of the correlation map (not the output)
 plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 
+EXTRA_IMG_IDENT = 'S'
 
 # Image post-processing settings:
 channel_exponent = 1. ## pixelwise exponentiation of image (like gamma curve)
@@ -50,6 +51,7 @@ unsharp_radius = 30
 
 ## Import common moduli
 import matplotlib, sys, os, time, collections, imageio
+from pathlib import Path 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import correlate2d, convolve2d
@@ -124,10 +126,10 @@ def paste_overlay(bgimage, fgimage, vs, hs, color, normalize=np.inf):
 
 ## Image manipulation routines
 def safe_imload(imname):
-    im = imageio.imread(imname.lstrip('+')) * 1.0  # plus sign has a special meaning of an 'extra' image
+    im = imageio.imread(Path(imname)str().lstrip('+')) * 1.0  # plus sign has a special meaning of an 'extra' image
     if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
     return im
-def is_extra(imname): return (imname[0] == '+' or ('S' in imname)) ## TODO this should be better defined...
+def is_extra(imname): return (imname[0] == '+' or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     unsharp_kernel = np.outer(2**-(np.linspace(-2,2,radius)**2), 2**-(np.linspace(-2,2,radius2 if radius2 else radius)**2))
     unsharp_kernel /= np.sum(unsharp_kernel)
@@ -151,6 +153,7 @@ extra_outputs, extra_names = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in sys.argv[1:]:
     ## Load an image
+    print(image_name)
     im = safe_imload(image_name)
     if not is_extra(image_name): 
         color = colors[0]
@@ -214,11 +217,13 @@ for croppx in range(int(max(composite_output.shape)/2)):
             and np.all(composite_output[croppx,:,:] == 0) and np.all(composite_output[-croppx,:,:] == 0)):
         print('can crop', croppx)
         break
+
+## TODO first crop, then annotate each image (separately)
 for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): 
-    imageio.imsave('channel{:02d}_'.format(n) + f.split('.')[0]+'.png', i[croppx:-croppx,croppx:-croppx,:])
-for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): 
-    imageio.imsave('extra{:02d}_'.format(n) + f.lstrip('+').split('.')[0]+ '.png', i[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave('composite_saturate' + '.png', saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave('composite.png', composite_output[croppx:-croppx,croppx:-croppx,:])
+    imageio.imsave(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.png'), i[croppx:-croppx,croppx:-croppx,:])
+#for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): 
+    #imageio.imsave('extra{:02d}_'.format(n) + f.lstrip('+').split('.')[0]+ '.png', i[croppx:-croppx,croppx:-croppx,:])
+#imageio.imsave('composite_saturate' + '.png', saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
+#imageio.imsave('composite.png', composite_output[croppx:-croppx,croppx:-croppx,:])
 
 

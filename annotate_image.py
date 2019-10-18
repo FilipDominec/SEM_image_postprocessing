@@ -100,6 +100,8 @@ for imname in sys.argv[1:]:
         elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
         else:                    scale_num, scale_unit = scale_bar,        'μm' 
 
+
+
         ## Rescale image and, if in SE-mode, normalize it
         im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
 
@@ -132,7 +134,10 @@ for imname in sys.argv[1:]:
             detectors.get(ih['lDetName'],''), 
             author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), 
             sample_name), x=xpos, y=im.shape[0]-ch, color=1)
+
+        ## TODO: coloured indication of wavelength
             
+        ## Export image
         outname = os.path.splitext(imname)[0]+'.png'
         if not os.path.isfile(outname): imageio.imsave(outname, im)
     except Exception as e: 
