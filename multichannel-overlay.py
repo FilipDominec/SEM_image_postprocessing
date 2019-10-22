@@ -27,7 +27,7 @@ TODOs:
 ## User settings
 
 # Settings for correlation of images:
-use_affine_transform = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+use_affine_transform = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
@@ -83,6 +83,9 @@ def find_shift(im1, im2):
 
 def my_affine_tr(im, shiftvec, trmatrix): ## convenience function around scipy's implementation
     troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner
+    if np.all(np.isclose(trmatrix, np.eye(2))): 
+            print('not using affine_transform due to I-trmatrix')
+            return im
     return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
 
 def find_affine(im1, im2, verbose=False):
@@ -105,10 +108,8 @@ def find_affine(im1, im2, verbose=False):
     return result.x[:2]*decim*.999, result.x[2:].reshape(2,2)
 
 def find_affine_and_shift(im1, im2):
-    if use_affine_transform: 
-        return find_affine(im1, im2)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
-    else:
-        return find_shift(im1, im2)     ## Find the best correlation of both images by brute-force search
+    if use_affine_transform:    return find_affine(im1, im2)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
+    else:                       return find_shift(im1, im2)     ## Find the best correlation of both images by brute-force search
 
 def paste_overlay(bgimage, fgimage, shiftvec, color, normalize=np.inf):
     for channel in range(3):
@@ -175,18 +176,14 @@ for image_name in sys.argv[1:]:
     if is_extra(image_name):
         extra_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3]) 
         # TODO enable non-affine-transformed overlay
-        paste_overlay(extra_output, np.pad(my_affine_tr(newimg, np.zeros(2), trmatrix_sum), pad_width=max_shift, mode='constant'), 
+        paste_overlay(extra_output, my_affine_tr(np.pad(newimg, pad_width=max_shift, mode='constant'), np.zeros(2), trmatrix_sum), 
             shiftvec_sum, [1,1,1,1], normalize=np.max(newimg_crop)) 
         extra_outputs.append(extra_output)
         extra_names.append(image_name)
     else:
         ## Process the new added image
-        if use_affine_transform:
-            im_unsharp = my_affine_tr(np.pad(unsharp_mask(newimg, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
-                    np.zeros(2), trmatrix_sum) 
-        else:
-            im_unsharp = np.pad(unsharp_mask(newimg, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant') 
-
+        im_unsharp = my_affine_tr(np.pad(unsharp_mask(newimg, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
+                np.zeros(2), trmatrix_sum) 
         ## Prepare the composite canvas with the first centered image
         if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
         paste_overlay(composite_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop))
@@ -197,14 +194,13 @@ for image_name in sys.argv[1:]:
         channel_outputs.append(channel_output)
         channel_names.append(image_name)
 
-    if is_extra(image_name): ## Extra images never affect alignment of further images
-        shiftvec_sum -= shiftvec_new
-        trmatrix_sum -= trmatrix_new - np.eye(2) # or... trmatrix_new.dot(trmatrix_sum) ? 
+    if not consecutive_alignment:   ## optionally, search alignment against the very first image
+        shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
+    elif is_extra(image_name):      ## extra imgs never affect alignment of further images
+        shiftvec_sum, trmatrix_sum = shiftvec_sum - shiftvec_new,   trmatrix_sum - (trmatrix_new - np.eye(2)) 
 
-    ## Remember the new transform, and store the image as a background for fitting of the next one
-    if not is_extra(image_name) and ('refimg' not in locals() or consecutive_alignment): 
-        refimg = newimg 
-        refimg_crop = refimg[:-int(newimg.shape[0]*databar_pct):decim, ::decim]*1.0
+    if 'refimg' not in locals() or (consecutive_alignment and not is_extra(image_name)): ## store the image as a reference
+        refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*databar_pct):decim, ::decim]*1.0
 
 ## Crop all images identically, according to the extent of unused black margins in the composite image
 for croppx in range(int(max(composite_output.shape)/2)):
