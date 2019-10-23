@@ -67,12 +67,15 @@ def find_shift(im1, im2):
     
     corr = correlate2d(laplace(im1), im2, mode='valid')     ## search for best overlap of edges (~ Laplacian of the image correlation)
     cr=1  # post-laplace cropping, there were some edge artifacts
-    if rel_smoothing:
-        rel_smoothing_kernel = np.outer(2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing)+1)**2), 2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing)+1)**2))
-        rel_smoothing_kernel /= np.sum(rel_smoothing_kernel)
-    else:
-        rel_smoothing_kernel = [[1]]
-    laplcorr = np.abs(convolve2d(corr, rel_smoothing_kernel, mode='valid'))[cr:-2-cr,cr:-cr] # simple rel_smoothing and removing spurious last 2lines
+    #if rel_smoothing:
+        #rel_smoothing_kernel = np.outer(2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing)+1)**2), 2**-(np.linspace(-2,2,int(im1.shape[0]*rel_smoothing)+1)**2))
+        #rel_smoothing_kernel /= np.sum(rel_smoothing_kernel)
+    #else:
+        #rel_smoothing_kernel = [[1]]
+    #laplcorr = np.abs(convolve2d(corr, rel_smoothing_kernel, mode='valid'))[cr:-2-cr,cr:-cr] # simple rel_smoothing and removing spurious last 2lines
+
+    laplcorr = np.abs(gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1]) if rel_smoothing else corr)
+
     vsize, hsize  = laplcorr.shape
 
     ## find optimum translation for the best image match
@@ -143,19 +146,18 @@ def saturate(im, saturation_enhance):
     return np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, np.max(im))
 
 
+image_names = sys.argv[1:]
 
 colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in sys.argv[1:] if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
-colors = [c*np.array([1.0, 0.8, 1.2, 1]) for c in colors] ## suppress green channel
+colors = [c*np.array([1.0, 0.8, 1.2, 1]) for c in colors[::-1]] ## suppress green channel
 channel_outputs, channel_names = [], []
 extra_outputs, extra_names = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
-for image_name in sys.argv[1:]:
+for image_name in image_names:
     ## Load an image
-    print(image_name)
     newimg = safe_imload(image_name)
-    if not is_extra(image_name): 
-        color = colors[0]
-        colors = colors[1:]
+    color = [1,1,1,1] if is_extra(image_name) else colors.pop()
+    print(image_name, colors, color)
     max_shift = int(rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(sys.argv[1:]) ## temporary very wide black padding for image alignment
 
@@ -177,7 +179,7 @@ for image_name in sys.argv[1:]:
         extra_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3]) 
         # TODO enable non-affine-transformed overlay
         paste_overlay(extra_output, my_affine_tr(np.pad(newimg, pad_width=max_shift, mode='constant'), np.zeros(2), trmatrix_sum), 
-            shiftvec_sum, [1,1,1,1], normalize=np.max(newimg_crop)) 
+            shiftvec_sum, color, normalize=np.max(newimg_crop)) 
         extra_outputs.append(extra_output)
         extra_names.append(image_name)
     else:
