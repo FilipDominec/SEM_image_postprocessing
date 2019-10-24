@@ -27,7 +27,7 @@ TODOs:
 ## User settings
 
 # Settings for correlation of images:
-use_affine_transform = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+use_affine_transform = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
@@ -39,7 +39,8 @@ plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 
 EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra
-EXTRA_IMG_LABEL = '+'   # each
+EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra
+def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 
 # Image post-processing settings:
 channel_exponent = 1. ## pixelwise exponentiation of image (like gamma curve)
@@ -121,7 +122,6 @@ def safe_imload(imname):
     im = imageio.imread(str(Path(imname).parent / Path(imname).name.lstrip(EXTRA_IMG_LABEL))) * 1.0  # plus sign has a special meaning of an 'extra' image
     if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
     return im
-def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     unsharp_kernel = np.outer(2**-(np.linspace(-2,2,radius)**2), 2**-(np.linspace(-2,2,radius2 if radius2 else radius)**2))
     unsharp_kernel /= np.sum(unsharp_kernel)
@@ -141,8 +141,7 @@ image_names = sys.argv[1:]
 
 colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in sys.argv[1:] if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
 colors = [c*np.array([1.0, 0.8, 1.2, 1]) for c in colors[::-1]] ## suppress green channel
-channel_outputs, channel_names = [], []
-extra_outputs, extra_names = [], []
+channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     ## Load an image
@@ -157,8 +156,7 @@ for image_name in image_names:
     if 'refimg' in locals(): ## the first image will be simply put to centre (nothing to align against)
         shiftvec_new, trmatrix_new = find_affine_and_shift(refimg_crop, newimg_crop)
         shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + trmatrix_new - np.eye(2)
-        print('image {} is shifted by ({:},{:}) px against the previous one and by ({:},{:}) against the first one'.format(image_name,
-                shiftvec_new[0],shiftvec_new[1], shiftvec_sum[0],shiftvec_sum[1]))
+        print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
     
     if not is_extra(image_name):
         ## Process the new added image
@@ -175,8 +173,7 @@ for image_name in image_names:
     else:
         paste_overlay(single_output, my_affine_tr(np.pad(newimg, pad_width=max_shift, mode='constant'), np.zeros(2), trmatrix_sum), 
                 shiftvec_sum, color, normalize=np.max(newimg_crop)) 
-    (extra_outputs if is_extra(image_name) else channel_outputs).append(single_output)
-    (extra_names if is_extra(image_name) else channel_names).append(image_name)
+    (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
@@ -194,9 +191,9 @@ for croppx in range(int(max(composite_output.shape)/2)):
         break
 
 ## TODO first crop, then annotate each image (separately)
-for n,(i,f) in enumerate(zip(channel_outputs, channel_names)): 
+for n,(i,f) in enumerate(channel_outputs): 
     imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.png')), i[croppx:-croppx,croppx:-croppx,:])
-for n,(i,f) in enumerate(zip(extra_outputs, extra_names)): 
+for n,(i,f) in enumerate(extra_outputs): 
     imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), i[croppx:-croppx,croppx:-croppx,:])
 imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
 imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])
