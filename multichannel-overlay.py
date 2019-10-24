@@ -155,18 +155,18 @@ for image_name in image_names:
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
     
     ## Process the new added image
-    im_unsharp = my_affine_tr(
+    newimg_processed = my_affine_tr(
             np.pad(unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
 
     ## Prepare the composite canvas with the first centered image
     if not is_extra(image_name):
         if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-        paste_overlay(composite_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop))
+        paste_overlay(composite_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop))
 
     ## Export an individual channel
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-    paste_overlay(single_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop)) # normalize to newimg_crop or single_output?
+    paste_overlay(single_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop)) # normalize to newimg_crop or single_output?
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
