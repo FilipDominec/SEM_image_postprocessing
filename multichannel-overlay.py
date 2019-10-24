@@ -78,8 +78,8 @@ def find_shift(im1, im2):
 
     return np.array([vshift_rel, hshift_rel]), np.eye(2) # shift vector (plus identity affine transform matrix)
 
-def my_affine_tr(im, shiftvec, trmatrix): ## convenience function around scipy's implementation
-    troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner
+def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function around scipy's implementation
+    troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner 
     if np.all(np.isclose(trmatrix, np.eye(2))): return im
     return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
 
@@ -94,7 +94,7 @@ def find_affine(im1, im2, verbose=False):
     crop_left   = int(im1.shape[1]/2-im2.shape[1]/2)
     crop_right  = int(im1.shape[1]/2-im2.shape[1]/2+.5)
     def fitf(p): 
-        return -np.abs(np.sum(laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right])*my_affine_tr(im2, p[:2], p[2:].reshape(2,2))))
+        return -np.abs(np.sum(laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right])*my_affine_tr(im2, p[2:].reshape(2,2), shiftvec=p[:2])))
 
     from scipy.optimize import differential_evolution
     m = .1 ## maximum relative affine transformation
@@ -140,7 +140,7 @@ def saturate(im, saturation_enhance):
 image_names = sys.argv[1:]
 
 colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in sys.argv[1:] if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
-colors = [c*np.array([1.0, 0.8, 1.2, 1]) for c in colors[::-1]] ## suppress green channel
+colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
@@ -160,8 +160,7 @@ for image_name in image_names:
     
     if not is_extra(image_name):
         ## Process the new added image
-        im_unsharp = my_affine_tr(np.pad(unsharp_mask(newimg, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), 
-                np.zeros(2), trmatrix_sum) 
+        im_unsharp = my_affine_tr(np.pad(unsharp_mask(newimg, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), trmatrix_sum) 
         ## Prepare the composite canvas with the first centered image
         if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
         paste_overlay(composite_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop))
@@ -171,8 +170,7 @@ for image_name in image_names:
     if not is_extra(image_name):
         paste_overlay(single_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop))
     else:
-        paste_overlay(single_output, my_affine_tr(np.pad(newimg, pad_width=max_shift, mode='constant'), np.zeros(2), trmatrix_sum), 
-                shiftvec_sum, color, normalize=np.max(newimg_crop)) 
+        paste_overlay(single_output, my_affine_tr(np.pad(newimg, pad_width=max_shift, mode='constant'), trmatrix_sum), shiftvec_sum, color, normalize=np.max(newimg_crop)) 
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
