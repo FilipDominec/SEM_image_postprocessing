@@ -46,7 +46,7 @@ def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT i
 channel_exponent = 1. ## pixelwise exponentiation of image (like gamma curve)
 saturation_enhance = .15
 unsharp_weight = 2 #2
-unsharp_radius = 30
+unsharp_radius = 6
 
 
 
@@ -123,14 +123,13 @@ def safe_imload(imname):
     if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
     return im
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
-    unsharp_kernel = np.outer(2**-(np.linspace(-2,2,radius)**2), 2**-(np.linspace(-2,2,radius2 if radius2 else radius)**2))
-    unsharp_kernel /= np.sum(unsharp_kernel)
-    if len(np.shape(im)) == 3:      # handle channels of colour image separately
-        unsharp = np.dstack([convolve2d(channel, unsharp_kernel, mode='same', boundary='symm') for channel in im])
-    else:
-        unsharp = convolve2d(im, unsharp_kernel, mode='same', boundary='symm')
-    #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
-    im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping
+    if weight:
+        if len(np.shape(im)) == 3:      # handle channels of colour image separately
+            unsharp = np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
+        else:
+            unsharp = gaussian_filter(im, sigma=radius)
+        im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
+        #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
     return im
 def saturate(im, saturation_enhance):
     monochr = np.dstack([np.sum(im, axis=2)]*3)
@@ -144,13 +143,10 @@ colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green c
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
-    ## Load an image
-    newimg = safe_imload(image_name)
+    print('loading', image_name); newimg = safe_imload(image_name)
     color = [1,1,1,1] if is_extra(image_name) else colors.pop()
-    print('loading', image_name)
     max_shift = int(rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(sys.argv[1:]) ## temporary very wide black padding for image alignment
-
     newimg_crop = gaussian_filter(newimg, sigma=decim*.5)[max_shift:-max_shift-int(newimg.shape[0]*databar_pct):decim, max_shift:-max_shift:decim]*1.0
 
     if 'refimg' in locals(): ## the first image will be simply put to centre (nothing to align against)
@@ -158,19 +154,19 @@ for image_name in image_names:
         shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + trmatrix_new - np.eye(2)
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
     
+    ## Process the new added image
+    im_unsharp = my_affine_tr(
+            np.pad(unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
+                    pad_width=max_shift, mode='constant'), trmatrix_sum) 
+
+    ## Prepare the composite canvas with the first centered image
     if not is_extra(image_name):
-        ## Process the new added image
-        im_unsharp = my_affine_tr(np.pad(unsharp_mask(newimg, weight=unsharp_weight, radius=unsharp_radius), pad_width=max_shift, mode='constant'), trmatrix_sum) 
-        ## Prepare the composite canvas with the first centered image
         if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
         paste_overlay(composite_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop))
 
     ## Export an individual channel
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-    if not is_extra(image_name):
-        paste_overlay(single_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop))
-    else:
-        paste_overlay(single_output, my_affine_tr(np.pad(newimg, pad_width=max_shift, mode='constant'), trmatrix_sum), shiftvec_sum, color, normalize=np.max(newimg_crop)) 
+    paste_overlay(single_output, im_unsharp, shiftvec_sum, color, normalize=np.max(newimg_crop)) # normalize to newimg_crop or single_output?
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
@@ -181,7 +177,7 @@ for image_name in image_names:
     if 'refimg' not in locals() or (consecutive_alignment and not is_extra(image_name)): ## store the image as a reference
         refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*databar_pct):decim, ::decim]*1.0
 
-## Crop all images identically, according to the extent of unused black margins in the composite image
+## Crop all images identically, according to the extent of unused black margins in the composite image # TODO indep cropping on X and Y
 for croppx in range(int(max(composite_output.shape)/2)):
     if not (np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) \
             and np.all(composite_output[croppx,:,:] == 0) and np.all(composite_output[-croppx,:,:] == 0)):
@@ -190,8 +186,8 @@ for croppx in range(int(max(composite_output.shape)/2)):
 
 ## TODO first crop, then annotate each image (separately)
 for n,(i,f) in enumerate(channel_outputs): 
-    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.png')), i[croppx:-croppx,croppx:-croppx,:])
+    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.NEW.png')), i[croppx:-croppx,croppx:-croppx,:])
 for n,(i,f) in enumerate(extra_outputs): 
-    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), i[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])
+    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.NEW.png')), i[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave(str(Path(f).parent / ('composite_saturate.NEW.png')), saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave(str(Path(f).parent / 'composite.NEW.png'), composite_output[croppx:-croppx,croppx:-croppx,:])
