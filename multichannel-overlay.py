@@ -68,7 +68,7 @@ def find_shift(im1, im2):
     cr=1  # post-laplace cropping, there were some edge artifacts
     lc = np.abs(gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1]) if rel_smoothing else corr) 
     raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
-    vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] + 0.5)*decim), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)*decim) # centre image
+    vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)*decim), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)*decim) # centre image
 
     fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
     def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
