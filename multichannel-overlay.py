@@ -154,17 +154,15 @@ for image_name in image_names:
         shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + trmatrix_new - np.eye(2)
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
     
-    ## Process the new added image
-    newimg_processed = my_affine_tr(
+    newimg_processed = my_affine_tr(        ## Process the new image: sharpening, padding and affine transform
             np.pad(unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
-
-    ## Prepare the composite canvas with the first centered image
-    if not is_extra(image_name):
+    
+    if not is_extra(image_name):            ## Add the image to the composite canvas
         if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
         paste_overlay(composite_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop))
 
-    ## Export an individual channel
+    ## Export the image individually (either as colored channel, or as an extra image)
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
     paste_overlay(single_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop)) # normalize to newimg_crop or single_output?
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
