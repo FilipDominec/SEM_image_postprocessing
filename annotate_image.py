@@ -46,7 +46,7 @@ logo_im = imageio.imread(str(inmydir('logo.png')))
 
 
 ## (microscope-dependent settings)
-detectors = {'0': 'SE', '3':'CL'}
+detectors = {'0': 'SE', '2':'CL (diode)', '3':'CL'}
 
 
 
@@ -86,7 +86,6 @@ for imname in sys.argv[1:]:
         if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
         elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
         else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
-        detectors = {'0': 'SE', '3':'CL'}
 
         try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).replace('-','_').split('_')[:2]
         except ValueError: sample_name, author_name = '', ''
