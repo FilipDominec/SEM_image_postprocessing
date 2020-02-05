@@ -70,6 +70,8 @@ logo_im = imageio.imread(str(inmydir('logo.png')))
 for imname in sys.argv[1:]:
     try:
         im = imageio.imread(imname)
+        downsample_size_threshold = 1000 #[px], smaller image will not be downsampled
+        downsample_magn_threshold = 5000 #[×], lower magnifications will not be downsampled
 
         ## Analyze the TIFF image header specific for Philips/FEI 30XL
         try:
@@ -87,10 +89,10 @@ for imname in sys.argv[1:]:
         elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
         else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
-        try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).replace('-','_').split('_')[:2]
+        try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).replace('_',' ').split('-')[:2]
         except ValueError: sample_name, author_name = '', ''
         if not sample_name:
-            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).replace('-','_').split('_')[:2]
+            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).replace('_',' ').split('-')[:2]
             except ValueError: sample_name, author_name = '', ''
 
         ## Prepare the scale bar
@@ -102,15 +104,28 @@ for imname in sys.argv[1:]:
 
 
         ## Rescale image and, if in SE-mode, normalize it
-        im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
+
+        print( (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
+        print( (im.shape[1] > downsample_size_threshold) , (float(ih['Magnification']) >= downsample_magn_threshold))
+        print( (im.shape[1] , downsample_size_threshold) , (float(ih['Magnification']) , downsample_magn_threshold))
+
+        print(im.shape)
+        if (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold):
+            im = scipy.ndimage.zoom(im, [1./anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1)
+        else:
+            im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
+        print(im.shape)
 
         if detectors.get(ih['lDetName'],'')  not in ('CL',):
             im -= np.min(im[:int(im.shape[0]*.8),:])
             im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
+            im = (im+1)%256
 
 
         ## Put the logo & web on the image
+        print(im[-1,:10])
         im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
+        print(im[-1,:10])
         im = im_logo(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
         xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
         if xpos > 0: im = im_print(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, color=.6)

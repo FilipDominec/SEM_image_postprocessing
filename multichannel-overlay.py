@@ -45,7 +45,7 @@ def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT i
 # Image post-processing settings:
 channel_exponent = 1. ## pixelwise exponentiation of image (like gamma curve)
 saturation_enhance = .15
-unsharp_weight = 2 #2
+unsharp_weight = 0 #2 #2
 unsharp_radius = 6
 
 
@@ -74,7 +74,7 @@ def find_shift(im1, im2):
     fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
     def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
     plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2/decim, lc.shape[0]-vshift_rel*2/decim, 'w')
-    fig.savefig('correlation_'+image_name.replace('TIF','PNG'), bbox_inches='tight')
+    #fig.savefig('correlation_'+image_name.replace('TIF','PNG'), bbox_inches='tight') ## needs basename path fixing
 
     return np.array([vshift_rel, hshift_rel]), np.eye(2) # shift vector (plus identity affine transform matrix)
 
