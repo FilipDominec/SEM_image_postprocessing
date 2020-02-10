@@ -27,12 +27,11 @@ TODOs:
 ## User settings
 
 # Settings for correlation of images:
+DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
 use_affine_transform = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
-decim=2                     ## decimation of images prior to correlation (does not affect the results much)
-databar_pct = (61./484)     ## relative height of databar at the images' bottom - to be clipped prior to correlation
-#databar_pct = 0.01     ## relative height of databar at the images' bottom - to be clipped prior to correlation
-#rel_smoothing = 15./300    ## smoothing of the correlation map (not the output), relative to image width
+decim=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
+databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
 rel_smoothing = .005         ## smoothing of the correlation map (not the output), relative to image width
 #rel_smoothing = False      ## no smoothing of the correlation map
 plot_correlation  = False    ## diagnostics
@@ -149,7 +148,7 @@ for image_name in image_names:
     if 'image_padding' not in locals(): image_padding = max_shift*len(sys.argv[1:]) ## temporary very wide black padding for image alignment
     newimg_crop = gaussian_filter(newimg, sigma=decim*.5)[max_shift:-max_shift-int(newimg.shape[0]*databar_pct):decim, max_shift:-max_shift:decim]*1.0
 
-    if 'refimg' in locals(): ## the first image will be simply put to centre (nothing to align against)
+    if 'refimg' in locals() and not DISABLE_TRANSFORM: ## the first image will be simply put to centre (nothing to align against)
         shiftvec_new, trmatrix_new = find_affine_and_shift(refimg_crop, newimg_crop)
         shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + trmatrix_new - np.eye(2)
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
