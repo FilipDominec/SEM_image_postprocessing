@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
+## TODO change os.path to pathlib
+# TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
+
 
 import numpy as np
 import sys, os, time, collections, imageio, warnings, pathlib, scipy.ndimage
@@ -52,7 +55,7 @@ def annotate_initialize():
     logo_im = imageio.imread(str(inmydir('logo.png'))) 
 
     try: 
-        typecase_img = imageio.imread(str(inmydir('typecase.png'))) # note: imageio.imread did not accept pathlib.Path objects!
+        typecase_img = imageio.imread(str(inmydir('typecase.png'))) 
     except FileNotFoundError:
         print('No type set found. To generate one: \n\t0. (optionally) turn on moderate pixel hinting, but disable ' +\
                 '"RGB sub-pixel hinting" \n\t1. make a screenshot of the line below, \n\t2. convert it to grayscale, '+\
@@ -66,10 +69,6 @@ def annotate_initialize():
 downsample_size_threshold = 1000 #[px], smaller image will not be downsampled
 downsample_magn_threshold = 5000 #[×], lower magnifications will not be downsampled
 
-# Load images
-#for imname in sys.argv[1:]:
-    #try:
-        #im = imageio.imread(imname)
 
 ## Load images
 def annotate_process(imnames):
@@ -81,8 +80,14 @@ def annotate_process(imnames):
             with open(imname, encoding = "ISO-8859-1") as of: 
                 ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
         except:
-            print('Image {:} does not contain readable SEM metadata, skipping it...'.format(imname))
-            continue
+            try: 
+                print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
+                with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
+                    ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+                    ih['lDetName'] = '3' ## FIXME: hack for detector override
+            except:
+                print('Error: mage {:} does not contain readable SEM metadata, skipping it...'.format(imname))
+                continue
 
         try:
             ## Preprocess the parameters
@@ -110,7 +115,7 @@ def annotate_process(imnames):
             ## Rescale image and, if in SE-mode, normalize it
             im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
 
-            if detectors.get(ih['lDetName'],'')  not in ('CL',):
+            if detectors.get(ih['lDetName'],'')  not in ('CL',): # image contrast enhancement (except CL, where intensity is to be preserved)
                 im -= np.min(im[:int(im.shape[0]*.8),:])
                 im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
 
