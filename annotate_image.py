@@ -5,6 +5,7 @@
 # TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
 
 
+
 import numpy as np
 import sys, os, time, collections, imageio, warnings, pathlib, scipy.ndimage
 warnings.filterwarnings("ignore")
@@ -78,6 +79,7 @@ def annotate_process(imnames):
         ## Analyze the TIFF image header specific for Philips/FEI 30XL
         try:
             with open(imname, encoding = "ISO-8859-1") as of: 
+                # TODO seek for [DatabarData] first, then count the 194 lines!
                 ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
         except:
             try: 
