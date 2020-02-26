@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
+import scipy
+import scipy.signal
 
 ## TODO change os.path to pathlib
 # TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
-
+OVERWRITE_ALLOWED = True
 
 
 import numpy as np
@@ -68,7 +70,7 @@ def annotate_initialize():
 
 
 downsample_size_threshold = 1000 #[px], smaller image will not be downsampled
-downsample_magn_threshold = 5000 #[×], lower magnifications will not be downsampled
+downsample_magn_threshold = 10000 # XXX #[×], lower magnifications will not be downsampled
 
 
 ## Load images
@@ -115,11 +117,16 @@ def annotate_process(imnames):
 
 
             ## Rescale image and, if in SE-mode, normalize it
-            im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
+            if (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold):
+                im = scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1) # order=1 yields smoothest downscaling
+            else:
+                im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1), order=1)
+            print(im.shape)
+
 
             if detectors.get(ih['lDetName'],'')  not in ('CL',): # image contrast enhancement (except CL, where intensity is to be preserved)
-                im -= np.min(im[:int(im.shape[0]*.8),:])
-                im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
+                im -= np.min(im) 
+                im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]), 0, 255)
 
 
             ## Put the logo & web on the image
@@ -151,7 +158,8 @@ def annotate_process(imnames):
                 
             ## Export image
             outname = os.path.splitext(imname)[0]+'.png'
-            if not os.path.isfile(outname): imageio.imsave(outname, im)
+            im = im/200+10
+            if not os.path.isfile(outname) or OVERWRITE_ALLOWED: imageio.imsave(outname, im)
         except Exception as e: 
             import traceback
             print('Error: image {:} skipped: \n\n'.format(imname), e,traceback.print_exc() ), traceback.print_exc()
@@ -173,16 +181,6 @@ def annotate_process(imnames):
         #print( (im.shape[1] , downsample_size_threshold) , (float(ih['Magnification']) , downsample_magn_threshold))
 #
         #print(im.shape)
-        #if (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold):
-            #im = scipy.ndimage.zoom(im, [1./anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1)
-        #else:
-            #im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1))
-        #print(im.shape)
-#
-        #if detectors.get(ih['lDetName'],'')  not in ('CL',):
-            #im -= np.min(im[:int(im.shape[0]*.8),:])
-            #im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]),0, 255)
-            #im = (im+1)%256
 #
 #
         # Put the logo & web on the image
