@@ -27,12 +27,13 @@ TODOs:
 ## User settings
 
 # Settings for correlation of images:
-DISABLE_TRANSFORM = True   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
+DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
 use_affine_transform = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
-rel_max_shift=.15           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
+rel_max_shift=.05           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
-rel_smoothing = .005         ## smoothing of the correlation map (not the output), relative to image width
+#databar_pct =  0            ##     (when no databar present)
+rel_smoothing = .0025         ## smoothing of the correlation map (not the output), relative to image width
 #rel_smoothing = False      ## no smoothing of the correlation map
 plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
@@ -152,7 +153,7 @@ for image_name in image_names:
         shiftvec_new, trmatrix_new = find_affine_and_shift(refimg_crop, newimg_crop)
         shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + trmatrix_new - np.eye(2)
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
-    
+
     newimg_processed = my_affine_tr(        ## Process the new image: sharpening, padding and affine transform
             np.pad(unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 

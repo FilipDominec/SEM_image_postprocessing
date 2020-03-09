@@ -6,6 +6,8 @@ import scipy.signal
 ## TODO change os.path to pathlib
 # TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
 OVERWRITE_ALLOWED = True
+downsample_size_threshold = 1000   # [px]: smaller image will not be downsampled
+downsample_magn_threshold = 15000  # [×]: lower magnifications will not be downsampled
 
 
 import numpy as np
@@ -69,9 +71,6 @@ def annotate_initialize():
     return logo_im, typecase_dict, ch, cw
 
 
-downsample_size_threshold = 1000 #[px], smaller image will not be downsampled
-downsample_magn_threshold = 10000 # XXX #[×], lower magnifications will not be downsampled
-
 
 ## Load images
 def annotate_process(imnames):
@@ -84,13 +83,13 @@ def annotate_process(imnames):
                 # TODO seek for [DatabarData] first, then count the 194 lines!
                 ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
         except:
-            try: 
+            try:  ## if no compatible header, try loading it from "_filename" in the same directory (the image file was perhaps edited)
                 print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
                 with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
                     ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-                    ih['lDetName'] = '3' ## FIXME: hack for detector override
+                    ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
             except:
-                print('Error: mage {:} does not contain readable SEM metadata, skipping it...'.format(imname))
+                print('Error: image {:} does not contain readable SEM metadata, skipping it...'.format(imname))
                 continue
 
         try:
@@ -102,10 +101,10 @@ def annotate_process(imnames):
             elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
             else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
-            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).replace('-','_').split('_')[:2]
+            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).split('_')[:2]
             except ValueError: sample_name, author_name = '', ''
-            if not sample_name:
-                try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).replace('-','_').split('_')[:2]
+            if not sample_name or len(author_name)>2:
+                try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).split('_')[:2]
                 except ValueError: sample_name, author_name = '', ''
 
             ## Prepare the scale bar
@@ -164,42 +163,6 @@ def annotate_process(imnames):
             import traceback
             print('Error: image {:} skipped: \n\n'.format(imname), e,traceback.print_exc() ), traceback.print_exc()
             
-
-#<<<<<<< HEAD
-        # Prepare the scale bar
-        #scale_bar = round125(size_x/4.8) # in μm
-        #if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
-        #elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
-        #else:                    scale_num, scale_unit = scale_bar,        'μm' 
-#
-#
-#
-        # Rescale image and, if in SE-mode, normalize it
-#
-        #print( (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
-        #print( (im.shape[1] > downsample_size_threshold) , (float(ih['Magnification']) >= downsample_magn_threshold))
-        #print( (im.shape[1] , downsample_size_threshold) , (float(ih['Magnification']) , downsample_magn_threshold))
-#
-        #print(im.shape)
-#
-#
-        # Put the logo & web on the image
-        #print(im[-1,:10])
-        #im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
-        #print(im[-1,:10])
-        #im = im_logo(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
-        #xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-        #if xpos > 0: im = im_print(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, color=.6)
-#
-        # Print the first couple of rows
-        #im = im_print(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-            #'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, color=.6)
-        #im = im_print(im, '{:<.0f} {:}'.format(
-            #scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, color=1)
-        #im = putscale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
-#=======
-#>>>>>>> 3bf477264aef13a9523b5f0081fbdd6730d9fa94
-
 if __name__ == '__main__':
     logo_im, typecase_dict, ch, cw = annotate_initialize()
     annotate_process(imnames = sys.argv[1:])
