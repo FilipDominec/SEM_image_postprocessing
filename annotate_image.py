@@ -71,26 +71,46 @@ def annotate_initialize():
     return logo_im, typecase_dict, ch, cw
 
 
+def read_header_XL30(imname, allow_underscore_alias=True):
+        """ 
+        Analyze the TIFF image header specific for Philips/FEI 30XL Microscope Control software (running under WinNT early 2000s)
+
+        Accepts:
+            imname 
+                path to be analyzed
+            boolean allow_underscore_alias
+                if set to True and image has no compatible header, try loading it from "_filename" in 
+                the same directory (the image file was perhaps edited)
+        
+        Returns a dict of all 194 key/value pairs found in the ascii header
+        """
+        try:
+            with open(imname, encoding = "ISO-8859-1") as of: 
+                # TODO seek for [DatabarData] first, then count the 194 lines!
+                ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+        except:
+                if not allow_underscore_alias: raise
+                print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
+                with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
+                    ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+                    #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
+            except:
+                print('Error: image {:} does not contain readable SEM metadata, skipping it...'.format(imname))
+                continue
+
+def add_databar_XL30(im, ih):
+    """
+    """
+
+
 
 ## Load images
 def annotate_process(imnames):
     for imname in imnames:
         im = imageio.imread(imname)
 
-        ## Analyze the TIFF image header specific for Philips/FEI 30XL
-        try:
-            with open(imname, encoding = "ISO-8859-1") as of: 
-                # TODO seek for [DatabarData] first, then count the 194 lines!
-                ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-        except:
-            try:  ## if no compatible header, try loading it from "_filename" in the same directory (the image file was perhaps edited)
-                print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
-                with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
-                    ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-                    ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
-            except:
-                print('Error: image {:} does not contain readable SEM metadata, skipping it...'.format(imname))
-                continue
+        ih = analyze_XL30_header(imname)
+        im = add_databar_XL30(im
 
         try:
             ## Preprocess the parameters
