@@ -102,10 +102,10 @@ def annotate_process(imnames):
             elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
             else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
-            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).replace('-','_').split('_')[:2]
+            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).split('-')[:2]
             except ValueError: sample_name, author_name = '', ''
             if not sample_name:
-                try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).replace('-','_').split('_')[:2]
+                try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).split('-')[:2]
                 except ValueError: sample_name, author_name = '', ''
 
             ## Prepare the scale bar
