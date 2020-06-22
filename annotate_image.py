@@ -71,7 +71,7 @@ def annotate_initialize():
     return logo_im, typecase_dict, ch, cw
 
 
-def read_header_XL30(imname, allow_underscore_alias=True):
+def analyze_header_XL30(imname, allow_underscore_alias=True):
         """ 
         Analyze the TIFF image header specific for Philips/FEI 30XL Microscope Control software (running under WinNT early 2000s)
 
@@ -89,14 +89,15 @@ def read_header_XL30(imname, allow_underscore_alias=True):
                 # TODO seek for [DatabarData] first, then count the 194 lines!
                 ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
         except:
-                if not allow_underscore_alias: raise
-                print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
-                with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
-                    ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-                    #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
-            except:
+            if not allow_underscore_alias: 
                 print('Error: image {:} does not contain readable SEM metadata, skipping it...'.format(imname))
-                continue
+                
+                #raise
+            print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
+            with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
+                ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+                #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
+        return ih
 
 def add_databar_XL30(im, ih):
     """
@@ -109,8 +110,8 @@ def annotate_process(imnames):
     for imname in imnames:
         im = imageio.imread(imname)
 
-        ih = analyze_XL30_header(imname)
-        im = add_databar_XL30(im
+        ih = analyze_header_XL30(imname)
+        #im = add_databar_XL30(im TODO
 
         try:
             ## Preprocess the parameters

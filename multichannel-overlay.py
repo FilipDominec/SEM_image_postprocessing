@@ -31,15 +31,15 @@ DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop 
 use_affine_transform = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.05           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
-databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
-#databar_pct =  0            ##     (when no databar present)
+#databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
+databar_pct =  0.01            ##     (when no databar present)
 rel_smoothing = .0025         ## smoothing of the correlation map (not the output), relative to image width
 #rel_smoothing = False      ## no smoothing of the correlation map
 plot_correlation  = False    ## diagnostics
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 
 EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra
-EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra
+EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra (and this symbol is removed prior to loading)
 def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 
 # Image post-processing settings:
