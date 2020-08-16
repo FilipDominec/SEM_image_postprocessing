@@ -51,9 +51,10 @@ for imname in imnames:
         input_layer = load_Siemens_BMP(imname)
     print(input_layer,input_layer.shape)
     #input_layer = input_layer * float(len(np.unique(input_layer))-1) / np.max(input_layer) ## normalize - the more unique levels found, the more EDX signal there was
-    input_layer = input_layer  / np.max(input_layer) ## normalize - the more unique levels found, the more EDX signal there was
+    input_layer = input_layer * float(len(np.unique(input_layer))-1)**.5 / np.max(input_layer) ## normalize - the more unique levels found, the more EDX signal there was
+    #input_layer = input_layer  / np.max(input_layer) ## normalize - the more unique levels found, the more EDX signal there was
     #input_layers.append(gaussian_filter(255-np.sum(imageio.imread(imname),axis=0), sigma=2)) ## slightly smear
-    input_layers.append(gaussian_filter(input_layer, sigma=1)) ## slightly smear
+    input_layers.append(gaussian_filter(input_layer, sigma=1.)) ## slightly smear
 input_layers = np.dstack(input_layers)
 
 
@@ -105,54 +106,74 @@ def recreate_image(codebook, labels, w, h):
 #plt.title('Original image (96,615 colors)')
 #plt.imshow(input_layers)
 
-fig, (ax1, ax) = plt.Subplots(2)
+fig = plt.figure()
+#fig, (ax1, ax) = plt.subplots(nrows=1, ncols=2)
+ax1 = fig.add_subplot(121)
+
 #plt.clf()
-#plt.axis('off')
-plt.title('Quantized image ({:d} colors, K-Means)'.format(n_colors))
-plt.imshow(recreate_image(kmeans.cluster_centers_, labels, w, h))
+plt.axis('off')
+ax1.set_title('Quantized image ({:d} colors, K-Means)'.format(n_colors))
+#ax1.imshow(recreate_image(kmeans.cluster_centers_, labels, w, h))
+
+print(kmeans.cluster_centers_, )
+idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
+print(kmeans.cluster_centers_[idx])
+for n in range(1000):
+    newidx = shuffle(idx, random_state=n)
+    newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
+    if 'bestmetric' not in locals() or newmetric < bestmetric:
+        bestidx = newidx
+        bestmetric = newmetric
+kmeans.cluster_centers_ = kmeans.cluster_centers_[bestidx]
+label_dict = dict(zip(bestidx, idx))
+print('label_dict', label_dict,zip(idx, bestidx))
+labels = [label_dict[x] for x in labels]
 
 import matplotlib.cm
-my_palette = matplotlib.cm.gist_rainbow(np.linspace(0, .9, n_colors+1)[:-1])
-plt.imshow(recreate_image(rand_palette, labels, w, h))
+my_palette = matplotlib.cm.gist_rainbow(np.linspace(0, 1, n_colors+1)[:-1])
+ax1.imshow(recreate_image(my_palette, labels, w, h))
 
-for color, clustcent, elem_name in zip(my_palette, kmeans.cluster_centers_, imnames):
+for color, clustcent in zip(my_palette, kmeans.cluster_centers_):
     l = ''
     for cc,imn in zip(clustcent,imnames):
         if cc>.2:  l+='{:s}$_{{ {:.2f} }}$'.format(imn[:-5].split('_')[-1], cc)
     for cc,imn in zip(clustcent,imnames):
         if cc>.05 and cc<=.2:  l+='({:s}$_{{ {:.2f} }}$) '.format(imn[:-5].split('_')[-1], cc)
-    print()
     #for cc in clustcent:
         #if cc>.2: l += '('+ elem_name[-6:-3] +') '
-
-    plt.plot([0,0],[0,0], label = l, lw=10, c=color)
+    ax1.plot([0,0],[0,0], label = l, lw=10, c=color)
 plt.legend()
 
-# We want to show all ticks...
-ax.set_xticks(np.arange(len(farmers)))
-ax.set_yticks(np.arange(len(vegetables)))
-# ... and label them with the respective list entries
-ax.set_xticklabels(farmers)
-ax.set_yticklabels(vegetables)
+## Spider plot (a visual legend)
+df = kmeans.cluster_centers_
+categories = imnames
+df = np.hstack((df, df[:,:1])) 
 
-# Rotate the tick labels and set their alignment.
-plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
-         rotation_mode="anchor")
+ 
+# What will be the angle of each axis in the plot? (we divide the plot / number of variable)
+#angles = [n / float(len(imnames)) * 360 for n in range(len(imnames))]
+#angles += angles[:1]
+angles = np.hstack((np.linspace(0, 2*np.pi, len(imnames)), [0]))
 
-# Loop over data dimensions and create text annotations.
-for i in range(len(vegetables)):
-    for j in range(len(farmers)):
-        text = ax.text(j, i, harvest[i, j],
-                       ha="center", va="center", color="w")
 
-ax.set_title("Harvest of local farmers (in tons/year)")
-fig.tight_layout()
-plt.show() 
-
-#plt.figure(3)
-#plt.clf()
-#plt.axis('off')
-#plt.title('Quantized image (64 colors, Random)')
-#plt.imshow(recreate_image(codebook_random, labels_random, w, h))
+ax = fig.add_subplot(122, polar=True)
+fig.set_facecolor('grey')
+ 
+# Draw one axe per variable + add labels labels yet
+ax.set_xticks(angles[:-1], categories) #, text_size=12
+ 
+# Draw ylabels
+ax.set_rlabel_position(0)
+ax.set_yticks([10,20,30], ["10","20","30"]) #, color="grey", size=12
+#ax.set_ylim(0,40)
+ 
+# Plot data
+#print('angles, df',angles, df)
+#print (imnames)
+ax.set_thetagrids(angles*180/np.pi, [name.split('_')[-1].split('.')[0] for name in imnames])
+for color, d, label in zip(my_palette, df, imnames):
+    ax.plot(angles, d, linewidth=3, linestyle='solid', label='label', color=color) 
+    ax.fill(angles, d,  alpha=0.2, color=color)
+#fig.savefig('aa.png')
 
 plt.show()
