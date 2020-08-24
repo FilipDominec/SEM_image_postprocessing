@@ -28,7 +28,7 @@ TODOs:
 
 # Settings for correlation of images:
 DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
-use_affine_transform = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+use_affine_transform = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.05           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 #databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
