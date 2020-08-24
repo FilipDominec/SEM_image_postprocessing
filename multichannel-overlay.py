@@ -5,7 +5,9 @@ Multichannel overlay
 
 Most important features:
     * Automatically aligns images so that their edge features are matched. (Technically, it maximizes abs value of Laplacians.)
-    * Optionally, affine transform can be used for better matching images that are rotated or slightly distorted. 
+    * Optionally, affine transform can be used for better matching images that are rotated or slightly distorted. (This happens
+      typically when e.g. electron acceleration voltage change between images or when sample gradually 
+      accumulates charge.)
     * Exports the coloured composite image, along with each channel separately. 
     * Additionally, "extra" images can be aligned and exported in grayscale, but they do not affect alignment of further channels. 
       This can be used, e.g., to align SEM images to a series of spectrally resolved cathodoluminescence mappings.
@@ -28,7 +30,7 @@ TODOs:
 
 # Settings for correlation of images:
 DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
-use_affine_transform = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+USE_AFFINE_TRANSFORM = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.05           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
 decim=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 #databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
@@ -103,7 +105,7 @@ def find_affine(im1, im2, verbose=False):
     return result.x[:2]*decim*.999, result.x[2:].reshape(2,2)
 
 def find_affine_and_shift(im1, im2):
-    if use_affine_transform:    return find_affine(im1, im2)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
+    if USE_AFFINE_TRANSFORM:    return find_affine(im1, im2)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
     else:                       return find_shift(im1, im2)     ## Find the best correlation of both images by brute-force search
 
 def paste_overlay(bgimage, fgimage, shiftvec, color, normalize=np.inf):
@@ -184,8 +186,8 @@ for croppx in range(int(max(composite_output.shape)/2)):
 
 ## TODO first crop, then annotate each image (separately)
 for n,(i,f) in enumerate(channel_outputs): 
-    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.NEW.png')), i[croppx:-croppx,croppx:-croppx,:])
+    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.png')), i[croppx:-croppx,croppx:-croppx,:])
 for n,(i,f) in enumerate(extra_outputs): 
-    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.NEW.png')), i[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave(str(Path(f).parent / ('composite_saturate.NEW.png')), saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave(str(Path(f).parent / 'composite.NEW.png'), composite_output[croppx:-croppx,croppx:-croppx,:])
+    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), i[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])

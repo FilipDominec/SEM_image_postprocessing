@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 # Author: Filip Dominec; inspired by an example from Robert Layton, Olivier Grisel, Mathieu Blondel
+# Installation on Linux (systemwide - run as root):
+#   sudo pip3 install -U scikit-learn
 #
 # License: BSD 3 clause
 
@@ -30,7 +32,7 @@ imnames  = sys.argv[2:]
 # Load the input images
 def load_Siemens_BMP(fname):
     """ 
-    Experimental loading of BMPs from Siemens microscopes (atypical - that cannot be loaded by imageio)
+    Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
     with open(fname, mode='rb') as file: # first analyze the header
@@ -77,8 +79,8 @@ for n_colors in range(3,len(imnames)+1): # subjectively proposed range of colour
     #print("done in %0.3fs." % (time() - t0))
 scores.sort()
 _, n_colors = scores[0]
-n_colors = 12
-print(scores,n_colors)
+#n_colors = 12 #XXX
+#print(scores,n_colors)
 
 
 ## Actual clustering on larger sample
@@ -87,15 +89,8 @@ kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(image_array_sample)
 t0 = time()
 labels = kmeans.predict(image_array)
 
-# Display all results, alongside original image
-#plt.figure(1)
-#plt.clf()
-#plt.axis('off')
-#plt.title('Original image (96,615 colors)')
-#plt.imshow(input_layers)
-
+# Diagnostics: Display all results, alongside original image
 fig = plt.figure()
-#fig, (ax1, ax) = plt.subplots(nrows=1, ncols=2)
 ax1 = fig.add_subplot(121)
 
 #plt.clf()
