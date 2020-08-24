@@ -5,70 +5,26 @@ import scipy.signal
 
 ## TODO change os.path to pathlib
 # TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
+# Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000   # [px]: smaller image will not be downsampled
 downsample_magn_threshold = 15000  # [×]: lower magnifications will not be downsampled
+
+PIXEL_ANISOTROPY = .91
+UNITY_MAGNIF_XDIM = 117500./1.03
+
+
 
 
 import numpy as np
 import sys, os, time, collections, imageio, warnings, pathlib, scipy.ndimage
 warnings.filterwarnings("ignore")
 
+import pure_numpy_image_processing as pnip
+
 ## (microscope-dependent settings)
 detectors = {'0': 'SE', '2':'Si diode', '3':'CL'}
 
-## General image-manipulation routines
-def match_wb_and_color(im1, im2): 
-    ''' Converts grayscale image 'im2' into a colourful one, and vice versa (the color mode of 'im1' being followed) '''
-    if len(im2.shape) > len(im1.shape): im2 = im2[:,:,0] ## reduce channel depth if needed
-    if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*3)
-    return im2
-
-## Font overlay routines
-def inmydir(fn): return pathlib.Path(__file__).resolve().parent/fn # finds the basename in the script's dir
-typecase_str = ''.join([chr(c) for c in list(range(32,127))+list(range(0x391,0x3a2))+list(range(0x3a3, 0x3aa))+\
-    list(range(0x3b1,0x3c2))+list(range(0x3c3,0x3ca))+[0xd7]]) # basic ASCII table + greek 
-
-def im_print(im, text, x, y, color=1):
-    for n,c in enumerate(text): 
-        if x+cw+cw*n>im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
-        else: 
-            im[y:y+ch, x+cw*n:x+cw*(n+1)] = match_wb_and_color(im, typecase_dict.get(c, typecase_dict['?'])) * color
-    return im
-
-## Image overlay
-def insert_image(im, inserted_img, x, y, color=1):
-    if type(inserted_img) is str: inserted_img = imageio.imread(inserted_img)
-    inserted_img = match_wb_and_color(im, inserted_img[:im.shape[0]-y, :im.shape[1]-x]) ## adjust colors and clip if needed
-    im[y:y+inserted_img.shape[0], x:x+inserted_img.shape[1]] = inserted_img * color
-    return im
-
-def round125(n):
-    expo = 10**np.floor(np.log10(n))
-    mant = n/expo
-    if mant > 5: return 5*expo
-    if mant > 2: return 2*expo
-    return 1*expo
-def putscale(im, x, y, h, xw):
-    white = 255 if len(im.shape) == 2 else np.ones(im.shape[2])*255
-    im[y+2:y+h-2,                     x-1:x+1,     ] = white
-    im[y+2:y+h-2,                     x-1+xw:x+1+xw] = white
-    im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = white
-    return im
-
-def annotate_initialize():
-    logo_im = imageio.imread(str(inmydir('logo.png'))) 
-
-    try: 
-        typecase_img = imageio.imread(str(inmydir('typecase.png'))) 
-    except FileNotFoundError:
-        print('No type set found. To generate one: \n\t0. (optionally) turn on moderate pixel hinting, but disable ' +\
-                '"RGB sub-pixel hinting" \n\t1. make a screenshot of the line below, \n\t2. convert it to grayscale, '+\
-                '\n\t3. crop the text between delimiting blocks and \n\t 4. save it in this folder as typecase.png')
-        print(chr(0x2588)+typecase_str.replace('\\',chr(0x29f5))+chr(0x2588)) # (prevents backslash escaping)
-    ch, cw = typecase_img.shape[0], round(typecase_img.shape[1]/len(typecase_str)) ## character height and width
-    typecase_dict = dict([(c, typecase_img[:,cw*n:cw*n+cw]) for n,c in enumerate(typecase_str)]) ## lookup dict for glyphs
-    return logo_im, typecase_dict, ch, cw
 
 
 def analyze_header_XL30(imname, allow_underscore_alias=True):
@@ -114,12 +70,11 @@ def annotate_process(imnames):
 
         try:
             ## Preprocess the parameters
-            anisotropy = .91
-            size_x = 117500. / float(ih['Magnification']) /1.03
-            size_y = size_x / im.shape[1] * im.shape[0]  / anisotropy
-            if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
-            elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
-            else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
+            size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification']) 
+            size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
+            if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4.0}'.format(size_y/1000)[:4] + ' mm'
+            elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4.0}'.format(size_y*1000)[:4] + ' nm'
+            else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4.0}'.format(size_y)[:4]      + ' μm'
 
             try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).split('_')[:2]
             except ValueError: sample_name, author_name = '', ''
@@ -128,6 +83,12 @@ def annotate_process(imnames):
                 except ValueError: sample_name, author_name = '', ''
 
             ## Prepare the scale bar
+            def round125(n):
+                expo = 10**np.floor(np.log10(n))
+                mant = n/expo
+                if mant > 5: return 5*expo
+                if mant > 2: return 2*expo
+                return 1*expo
             scale_bar = round125(size_x/4.8) # in μm
             if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
             elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
@@ -138,41 +99,42 @@ def annotate_process(imnames):
             ## Rescale image and, if in SE-mode, normalize it
             if (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold):
                 # note: "order=1" yields smoothest downscaling
-                im = scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1) 
+                im = scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./PIXEL_ANISOTROPY/2] + [0.5] + [1]*(len(im.shape)-2), order=1) 
             else:
-                im = scipy.ndimage.zoom(im, [1./anisotropy] + [1]*(len(im.shape)-1), order=1)
+                im = scipy.ndimage.zoom(im, [1./PIXEL_ANISOTROPY] + [1]*(len(im.shape)-1), order=1)
             print(im.shape)
 
 
-            if detectors.get(ih['lDetName'],'')  not in ('CL',): # image contrast enhancement (except CL, where intensity is to be preserved)
+            # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
+            if detectors.get(ih['lDetName'],'')  not in ('CL',): 
                 im -= np.min(im) 
                 im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]), 0, 255)
 
 
             ## Put the logo & web on the image
             im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
-            im = insert_image(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
+            im = pnip.put_image(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
             xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-            if xpos > 0: im = im_print(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, color=.6)
+            if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
 
-            ## Print the first couple of rows
-            im = im_print(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-                'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, color=.6)
-            im = im_print(im, '{:<.0f} {:}'.format(
-                scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, color=1)
-            im = putscale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
+            ## Print the first couple of rows in the databar
+            im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
+                'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+            im = pnip.put_text(im, '{:<.0f} {:}'.format(
+                scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+            im = pnip.put_scale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
 
-            ## Print the second couple of rows
-            im = im_print(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
+            ## Print the second couple of rows in the databar
+            im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
                 float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
                 '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-                size_str), x=xpos, y=im.shape[0]-ch*3, color=1)
-            im = im_print(im, '{:<13} {:<13} {:<13}'.format(
-                'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, color=.6)
-            im = im_print(im, '{:<13} {:<13} {:<13}'.format(
+                size_str), x=xpos, y=im.shape[0]-ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+            im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
+                'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+            im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
                 detectors.get(ih['lDetName'],''), 
                 author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), 
-                sample_name), x=xpos, y=im.shape[0]-ch, color=1)
+                sample_name), x=xpos, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
 
             ## TODO: coloured indication of wavelength
                 
@@ -185,7 +147,8 @@ def annotate_process(imnames):
             print('Error: image {:} skipped: \n\n'.format(imname), e,traceback.print_exc() ), traceback.print_exc()
             
 if __name__ == '__main__':
-    logo_im, typecase_dict, ch, cw = annotate_initialize()
+    logo_im = imageio.imread(str(pnip.inmydir('logo.png'))) 
+    typecase_dict, ch, cw = pnip.annotate_initialize()
     annotate_process(imnames = sys.argv[1:])
 
 

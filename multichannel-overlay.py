@@ -17,7 +17,6 @@ Additional features
     * Since electron-microscope images can contain a databar, the bottom portion of the images is ignored during alignment
 
 TODOs: 
-    * put image-manip routines into a separate module
     * join the export with annotate.py
     * don't forget to anisotropically scale at the load time
     * (too aggressive clipping, or clipping channels too early?) colors are still not as crisp as they used to be 
@@ -56,12 +55,13 @@ unsharp_radius = 6
 ## Import common moduli
 import matplotlib, sys, os, time, collections, imageio
 from pathlib import Path 
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import correlate2d, convolve2d
 from scipy.ndimage.filters import laplace, gaussian_filter
 from scipy.ndimage import affine_transform, zoom
 np.warnings.filterwarnings('ignore')
+
+import pure_numpy_image_processing as pnip
 
 def find_shift(im1, im2):
     """
@@ -73,9 +73,10 @@ def find_shift(im1, im2):
     raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
     vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)*decim), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)*decim) # centre image
 
-    fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
-    def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
-    plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2/decim, lc.shape[0]-vshift_rel*2/decim, 'w')
+    #import matplotlib.pyplot as plt ## Optional debugging
+    #fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
+    #def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
+    #plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2/decim, lc.shape[0]-vshift_rel*2/decim, 'w')
     #fig.savefig('correlation_'+image_name.replace('TIF','PNG'), bbox_inches='tight') ## needs basename path fixing
 
     return np.array([vshift_rel, hshift_rel]), np.eye(2) # shift vector (plus identity affine transform matrix)
@@ -119,24 +120,6 @@ def paste_overlay(bgimage, fgimage, shiftvec, color, normalize=np.inf):
                 #fgimage**channel_exponent*float(color[channel]) 
 
 
-## Image manipulation routines
-def safe_imload(imname):
-    im = imageio.imread(str(Path(imname).parent / Path(imname).name.lstrip(EXTRA_IMG_LABEL))) * 1.0  # plus sign has a special meaning of an 'extra' image
-    if len(im.shape) > 2: im = im[:,:,0] # using monochrome images only; strip other channels than the first
-    return im
-def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
-    if weight:
-        if len(np.shape(im)) == 3:      # handle channels of colour image separately
-            unsharp = np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
-        else:
-            unsharp = gaussian_filter(im, sigma=radius)
-        im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
-        #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
-    return im
-def saturate(im, saturation_enhance):
-    monochr = np.dstack([np.sum(im, axis=2)]*3)
-    return np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, np.max(im))
-
 
 image_names = sys.argv[1:]
 
@@ -145,7 +128,8 @@ colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green c
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
-    print('loading', image_name); newimg = safe_imload(image_name)
+    print('loading', image_name); 
+    newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)))
     color = [1,1,1,1] if is_extra(image_name) else colors.pop()
     max_shift = int(rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(sys.argv[1:]) ## temporary very wide black padding for image alignment
@@ -157,7 +141,7 @@ for image_name in image_names:
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new, shiftvec_sum))
 
     newimg_processed = my_affine_tr(        ## Process the new image: sharpening, padding and affine transform
-            np.pad(unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
+            np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
     
     if not is_extra(image_name):            ## Add the image to the composite canvas
@@ -189,5 +173,5 @@ for n,(i,f) in enumerate(channel_outputs):
     imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.png')), i[croppx:-croppx,croppx:-croppx,:])
 for n,(i,f) in enumerate(extra_outputs): 
     imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), i[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), pnip.saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
 imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])

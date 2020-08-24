@@ -55,10 +55,9 @@ for imname in imnames:
 input_layers = np.dstack(input_layers)
 
 
-# Convert to floats instead of the default 8 bits integer coding. Dividing by
-# 255 is important so that plt.imshow works properly  XXX
-#input_layers = np.array(input_layers, dtype=np.float64) / 255
 
+
+# == Clustering (using KMeans algorithm here) ==
 # Load Image and transform to a 2D numpy array.
 w, h, d = input_layers.shape
 image_array = np.reshape(input_layers, (w * h, d))
@@ -89,6 +88,9 @@ kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(image_array_sample)
 t0 = time()
 labels = kmeans.predict(image_array)
 
+
+
+## == Output using matplotlib (TODO: remove this dep) ===
 # Diagnostics: Display all results, alongside original image
 fig = plt.figure()
 ax1 = fig.add_subplot(121)
@@ -98,9 +100,9 @@ plt.axis('off')
 ax1.set_title('Quantized image ({:d} colors, K-Means)'.format(n_colors))
 #ax1.imshow(recreate_image(kmeans.cluster_centers_, labels, w, h))
 
-## Reorder the cluster and label arrays so that 
+## Reorder the cluster and label arrays so that similar materials have similar index (and thus, colour)
 idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
-for n in range(10000):
+for n in range(1000):
     newidx = shuffle(idx, random_state=n)
     newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
     if 'bestmetric' not in locals() or newmetric < bestmetric:
@@ -142,32 +144,14 @@ plt.legend()
 df = kmeans.cluster_centers_
 categories = imnames
 df = np.hstack((df, df[:,:1])) 
-
- 
-# What will be the angle of each axis in the plot? (we divide the plot / number of variable)
-#angles = [n / float(len(imnames)) * 360 for n in range(len(imnames))]
-#angles += angles[:1]
 angles = np.hstack((np.linspace(0, 2*np.pi, len(imnames)), [0]))
-
-
 ax = fig.add_subplot(122, polar=True)
 fig.set_facecolor('grey')
- 
-# Draw one axe per variable + add labels labels yet
 ax.set_xticks(angles[:-1], categories) #, text_size=12
- 
-# Draw ylabels
 ax.set_rlabel_position(0)
 ax.set_yticks([10,20,30], ["10","20","30"]) #, color="grey", size=12
-#ax.set_ylim(0,40)
- 
-# Plot data
-#print('angles, df',angles, df)
-#print (imnames)
 ax.set_thetagrids(angles*180/np.pi, [name.split('_')[-1].split('.')[0] for name in imnames])
 for color, d, label in zip(my_palette, df, imnames):
     ax.plot(angles, d, linewidth=3, linestyle='solid', label='label', color=color) 
     ax.fill(angles, d,  alpha=0.2, color=color)
-#fig.savefig('aa.png')
-
 plt.show()
