@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
-import scipy
-import scipy.signal
 
 ## TODO change os.path to pathlib
 # TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
@@ -17,14 +15,13 @@ UNITY_MAGNIF_XDIM = 117500./1.03
 
 
 import numpy as np
-import sys, os, time, collections, imageio, warnings, pathlib, scipy.ndimage
+import sys, os, time, collections, imageio, warnings, pathlib
 warnings.filterwarnings("ignore")
 
 import pure_numpy_image_processing as pnip
 
 ## (microscope-dependent settings)
 detectors = {'0': 'SE', '2':'Si diode', '3':'CL'}
-
 
 
 def analyze_header_XL30(imname, allow_underscore_alias=True):
@@ -69,12 +66,14 @@ def annotate_process(imnames):
         #im = add_databar_XL30(im TODO
 
         try:
+            add_databar_XL30(im, ih)
             ## Preprocess the parameters
-            size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification']) 
+            size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  / 10. ## XXX
+            #size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
             size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
-            if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4.0}'.format(size_y/1000)[:4] + ' mm'
-            elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4.0}'.format(size_y*1000)[:4] + ' nm'
-            else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4.0}'.format(size_y)[:4]      + ' μm'
+            if size_x > 1000: size_str = '{:<4.4f}'.format(size_x/1000)[:4] + '×{:<4.4f}'.format(size_y/1000)[:4] + ' mm'
+            elif size_x < 1:  size_str = '{:<4.4f}'.format(size_x*1000)[:4] + '×{:<4.4f}'.format(size_y*1000)[:4] + ' nm'
+            else:             size_str = '{:<4.4f}'.format(size_x)[:4]      + '×{:<4.4f}'.format(size_y)[:4]      + ' μm'
 
             try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).split('_')[:2]
             except ValueError: sample_name, author_name = '', ''
@@ -95,20 +94,12 @@ def annotate_process(imnames):
             else:                    scale_num, scale_unit = scale_bar,        'μm' 
 
 
+            ## Rescale image (and down-scale, if it is high-res and high-magnif)
+            im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY, 
+                    downscaletwice = (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
 
-            ## Rescale image and, if in SE-mode, normalize it
-            if (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold):
-                # note: "order=1" yields smoothest downscaling
-                im = scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./PIXEL_ANISOTROPY/2] + [0.5] + [1]*(len(im.shape)-2), order=1) 
-            else:
-                im = scipy.ndimage.zoom(im, [1./PIXEL_ANISOTROPY] + [1]*(len(im.shape)-1), order=1)
-            print(im.shape)
-
-
-            # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
-            if detectors.get(ih['lDetName'],'')  not in ('CL',): 
-                im -= np.min(im) 
-                im = np.clip(im * 256. / np.max(im[:int(im.shape[0]*.8),:]), 0, 255)
+            if detectors.get(ih['lDetName'],'')  not in ('CL',):  
+                im = pnip.auto_contrast_SEM(im)
 
 
             ## Put the logo & web on the image
@@ -148,7 +139,7 @@ def annotate_process(imnames):
             
 if __name__ == '__main__':
     logo_im = imageio.imread(str(pnip.inmydir('logo.png'))) 
-    typecase_dict, ch, cw = pnip.annotate_initialize()
+    typecase_dict, ch, cw = pnip.text_initialize()
     annotate_process(imnames = sys.argv[1:])
 
 
