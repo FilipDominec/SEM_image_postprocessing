@@ -11,47 +11,50 @@
 
 print(__doc__)
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm
+import matplotlib.pyplot as plt ## TODO get rid of
+import matplotlib.cm ## TODO get rid of
 from sklearn.cluster import KMeans
-from sklearn.metrics import pairwise_distances_argmin
-from sklearn.datasets import load_sample_image
-from sklearn.utils import shuffle
+#from sklearn.metrics import pairwise_distances_argmin
+#from sklearn.datasets import load_sample_image
+from sklearn.utils import shuffle ## TODO get rid of
 from time import time
 
 from numpy.random import random
 import imageio, sys
 from scipy.ndimage.filters import gaussian_filter
 
-
-# User input and settings
-n_colors = int(sys.argv[1])
-imnames  = sys.argv[2:]
+import pure_numpy_image_processing as pnip
 
 
-# Load the input images
-def load_Siemens_BMP(fname):
-    """ 
-    Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
-    See https://ide.kaitai.io/ for more information on BMP header. 
-    """
-    with open(fname, mode='rb') as file: # first analyze the header
-        fileContent = file.read()
-        ofs, w, h, bpp, compr = [int.from_bytes(fileContent[s:e], byteorder='little', signed=False) for s,e in 
-                ((0x0a,0x0e),(0x12,0x16),(0x16,0x1a),(0x1c,0x1e),(0x1e,0x22))]
-    assert bpp == 8, f'monochrome/LUT image assumed (8 bit per pixel); {fname} has {bpp}bpp'
-    assert compr == 0, 'no decompression algorithm implemented'
-    return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
+# STATIC SETTINGS
+SMOOTHING_PX = 1.5      # higher value -> less jagged material regions, but worse resolution
+
+DENORM_EXP   =  .5      # partial de-normalization: EDX saves images as normalized. The more 
+                        # unique levels we count in each image, 
+                        # the more EDX signal there was. Select DENORM_EXP = 0 to disable this.
+                        # Select DENORM_EXP = 1 for full proportionality, but this seems "too much".
+
+
+
+
+# User input
+#n_colors = int(sys.argv[1])
+#imnames  = sys.argv[2:]
+imnames  = sys.argv[1:]
+
+
 
 input_layers = []
 for imname in imnames:
-    try: input_layer = imageio.imread(imname)
-    except: input_layer = load_Siemens_BMP(imname)
+    #try: input_layer = imageio.imread(imname)
+    #except: input_layer = load_Siemens_BMP(imname)
+    input_layer = pnip.safe_imload(imname)
+    #xxx assert input_layer.shape[2] == 1, 'did not expect RGB images from an EDX channel'
 
-    ## partial de-normalization: the more unique levels found in each image, the more EDX signal there was 
-    input_layer = input_layer * float(len(np.unique(input_layer))-1)**.5 / np.max(input_layer) 
+    ## partial de-normalization:
+    input_layer = input_layer * float(len(np.unique(input_layer))-1)**DENORM_EXP / np.max(input_layer) 
     ## slightly smear
-    input_layers.append(gaussian_filter(input_layer, sigma=1.5)) 
+    input_layers.append(gaussian_filter(input_layer, sigma=SMOOTHING_PX)) 
 input_layers = np.dstack(input_layers)
 
 
@@ -60,33 +63,36 @@ input_layers = np.dstack(input_layers)
 # == Clustering (using KMeans algorithm here) ==
 # Load Image and transform to a 2D numpy array.
 w, h, d = input_layers.shape
-image_array = np.reshape(input_layers, (w * h, d))
+pixel_array = np.reshape(input_layers, (w * h, d))
 
 ## Guess the optimum number of clusters (todo: should another algorithm be chosen?)
 scores = []
 for n_colors in range(3,len(imnames)+1): # subjectively proposed range of colour count to test
     t0 = time()
-    image_array_sample = shuffle(image_array, random_state=0)[:100]
-    kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(image_array_sample)
+    pixel_array_sample = shuffle(pixel_array, random_state=0)[:100]
+    kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(pixel_array_sample)
     #print('n_colors, kmeans.inertia, c*i',n_colors, kmeans.inertia_, n_colors, kmeans.inertia_*n_colors**1.2)
     scores.append((kmeans.inertia_*n_colors**(1+1./len(imnames)), n_colors))
     #print("done in %0.3fs." % (time() - t0))
 
     # Get labels for all points
     t0 = time()
-    labels = kmeans.predict(image_array)
+    labels = kmeans.predict(pixel_array)
     #print("done in %0.3fs." % (time() - t0))
 scores.sort()
-_, n_colors = scores[0]
-#n_colors = 12 #XXX
+#_, n_colors = scores[0]
+n_colors = 12 #XXX
 #print(scores,n_colors)
 
 
 ## Actual clustering on larger sample
-image_array_sample = shuffle(image_array, random_state=0)[:1000]
-kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(image_array_sample)
-t0 = time()
-labels = kmeans.predict(image_array)
+pixel_array_sample = shuffle(pixel_array, random_state=0)[:1000]
+kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(pixel_array_sample)
+labels = kmeans.predict(pixel_array)
+
+
+## == Output to a numpy array == 
+imageio.imsave('edx_out.png', labels.reshape([w,h]))
 
 
 
@@ -102,12 +108,13 @@ ax1.set_title('Quantized image ({:d} colors, K-Means)'.format(n_colors))
 
 ## Reorder the cluster and label arrays so that similar materials have similar index (and thus, colour)
 idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
-for n in range(1000):
+for n in range(10000):
     newidx = shuffle(idx, random_state=n)
     newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
     if 'bestmetric' not in locals() or newmetric < bestmetric:
         bestidx = newidx
         bestmetric = newmetric
+    print(bestmetric, newmetric)
 kmeans.cluster_centers_ = kmeans.cluster_centers_[bestidx]
 label_dict = dict(zip(bestidx, idx))
 labels = [label_dict[x] for x in labels]
@@ -142,12 +149,11 @@ plt.legend()
 
 ## Spider plot (a visual legend)
 df = kmeans.cluster_centers_
-categories = imnames
 df = np.hstack((df, df[:,:1])) 
 angles = np.hstack((np.linspace(0, 2*np.pi, len(imnames)), [0]))
 ax = fig.add_subplot(122, polar=True)
 fig.set_facecolor('grey')
-ax.set_xticks(angles[:-1], categories) #, text_size=12
+ax.set_xticks(angles[:-1], imnames) #, text_size=12
 ax.set_rlabel_position(0)
 ax.set_yticks([10,20,30], ["10","20","30"]) #, color="grey", size=12
 ax.set_thetagrids(angles*180/np.pi, [name.split('_')[-1].split('.')[0] for name in imnames])
