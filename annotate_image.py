@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
-## TODO change os.path to pathlib
 # TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
 # Static user settings
 OVERWRITE_ALLOWED = True
@@ -15,9 +14,8 @@ UNITY_MAGNIF_XDIM = 117500./1.03
 
 
 import numpy as np
-import sys, os, time, collections, imageio, warnings, pathlib
+import sys, time, imageio, warnings, pathlib
 warnings.filterwarnings("ignore")
-
 import pure_numpy_image_processing as pnip
 
 ## (microscope-dependent settings)
@@ -58,28 +56,32 @@ def add_databar_XL30(im, ih):
 
 
 ## Load images
-def annotate_process(imnames):
+def annotate_individually(imnames):
     for imname in imnames:
-        im = imageio.imread(imname)
-
+        im = imageio.imread(imname) # 
         ih = analyze_header_XL30(imname)
-        #im = add_databar_XL30(im TODO
+        #im = add_databar_XL30(im, ih) # TODO
 
         try:
-            add_databar_XL30(im, ih)
             ## Preprocess the parameters
-            size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  / 10. ## XXX
-            #size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
+            size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
             size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
-            if size_x > 1000: size_str = '{:<4.4f}'.format(size_x/1000)[:4] + '×{:<4.4f}'.format(size_y/1000)[:4] + ' mm'
-            elif size_x < 1:  size_str = '{:<4.4f}'.format(size_x*1000)[:4] + '×{:<4.4f}'.format(size_y*1000)[:4] + ' nm'
-            else:             size_str = '{:<4.4f}'.format(size_x)[:4]      + '×{:<4.4f}'.format(size_y)[:4]      + ' μm'
+            if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
+            elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
+            else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
-            try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.abspath(imname))).split('_')[:2]
-            except ValueError: sample_name, author_name = '', ''
-            if not sample_name or len(author_name)>2:
-                try: sample_name, author_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(imname)))).split('_')[:2]
-                except ValueError: sample_name, author_name = '', ''
+            def extract_sample_author_name(filepath, max_depth=2):
+                """ Our convention is that data from sample 123 measured 25th June 2020 by John Doe are saved into the 
+                '123_JD_200725/' (or its subdirs up to max_depth). This function then analyzes (possibly relative) path of a file 
+                and returns ('123', 'JD')
+                """
+                sample_name, author_name = '', ''
+                for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
+                    try: sample_name, author_name = parent.name.split('_')[:2]
+                    except ValueError: pass 
+                    if sample_name or len(author_name)==2: break
+                return sample_name, author_name
+            sample_name, author_name = extract_sample_author_name(imname)
 
             ## Prepare the scale bar
             def round125(n):
@@ -124,22 +126,24 @@ def annotate_process(imnames):
                 'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
             im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
                 detectors.get(ih['lDetName'],''), 
-                author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(os.path.getmtime(imname))), 
+                author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
                 sample_name), x=xpos, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
 
             ## TODO: coloured indication of wavelength
                 
             ## Export image
-            outname = os.path.splitext(imname)[0]+'.png'
-            im = im/200+10
-            if not os.path.isfile(outname) or OVERWRITE_ALLOWED: imageio.imsave(outname, im)
+            outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
+            if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 
+                imageio.imsave(outname, im)
+                print(f"OK: Processed {imname} and exported to {outname}.")
+            else: print(f"Warning: file {imname} exists, and overwriting was not allowed. Not saving.")
         except Exception as e: 
             import traceback
-            print('Error: image {:} skipped: \n\n'.format(imname), e,traceback.print_exc() ), traceback.print_exc()
+            print('Error: image {:} skipped: \n\n'.format(outname), e,traceback.print_exc() ), traceback.print_exc()
             
 if __name__ == '__main__':
     logo_im = imageio.imread(str(pnip.inmydir('logo.png'))) 
     typecase_dict, ch, cw = pnip.text_initialize()
-    annotate_process(imnames = sys.argv[1:])
+    annotate_individually(imnames = sys.argv[1:])
 
 
