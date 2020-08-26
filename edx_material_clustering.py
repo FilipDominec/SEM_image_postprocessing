@@ -27,9 +27,9 @@ import pure_numpy_image_processing as pnip
 
 
 # STATIC SETTINGS
-SMOOTHING_PX = 1.5      # higher value -> less jagged material regions, but worse resolution
+SMOOTHING_PX = 1.0      # higher value -> less jagged material regions, but worse resolution
 
-DENORM_EXP   =  .5      # partial de-normalization: EDX saves images as normalized. The more 
+DENORM_EXP   =  .19      # partial de-normalization: EDX saves images as normalized. The more 
                         # unique levels we count in each image, 
                         # the more EDX signal there was. Select DENORM_EXP = 0 to disable this.
                         # Select DENORM_EXP = 1 for full proportionality, but this seems "too much".
@@ -81,7 +81,7 @@ for n_colors in range(3,len(imnames)+1): # subjectively proposed range of colour
     #print("done in %0.3fs." % (time() - t0))
 scores.sort()
 #_, n_colors = scores[0]
-n_colors = 12 #XXX
+n_colors = 7 #XXX
 #print(scores,n_colors)
 
 
@@ -92,7 +92,44 @@ labels = kmeans.predict(pixel_array)
 
 
 ## == Output to a numpy array == 
-imageio.imsave('edx_out.png', labels.reshape([w,h]))
+
+palette = np.array([pnip.hsv_to_rgb(i,1,1) for i in np.linspace(0,1,np.max(labels)+1)])
+labels_remapped = palette[labels]
+im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
+imageio.imsave('edx_raw.png', im_reshaped)
+
+## Reorder the cluster and label arrays so that similar materials have similar index (and thus, colour)
+idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
+for n in range(1000):
+    newidx = shuffle(idx, random_state=n)
+    newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
+    if 'bestmetric' not in locals() or newmetric < bestmetric:
+        bestidx = newidx
+        bestmetric = newmetric
+    #print(bestmetric, newmetric)
+kmeans.cluster_centers_ = kmeans.cluster_centers_[bestidx]
+label_dict = dict(zip(bestidx, idx))
+labels = [label_dict[x] for x in labels]
+
+labels_remapped = palette[labels]
+im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
+imageio.imsave('edx_raw_remap.png', im_reshaped)
+
+bgim = pnip.safe_imload('~/SEM/LED_reports/LED_reports_2020-06-00/M2/emap200x/I30S.TIF') ## FIXME
+imageio.imsave('edx_wb.png', bgim)
+
+import scipy.ndimage
+im_resc = np.dstack([scipy.ndimage.zoom(im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
+imageio.imsave('edx_raw_remap_resc.png', im_resc)
+
+im_resc = np.dstack([bgim**.5*scipy.ndimage.zoom(im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
+imageio.imsave('edx_target.png', im_resc)
+
+#im_resc = np.dstack([np.pad(bgim,[(0,5),(0,0),(0,0)])*np.pad(im_rescbgim,[(0,5),(0,0),(0,0)]))
+#imageio.imsave('edx_target.png', im_resc)
+
+quit() # XXX
+
 
 
 
@@ -108,13 +145,13 @@ ax1.set_title('Quantized image ({:d} colors, K-Means)'.format(n_colors))
 
 ## Reorder the cluster and label arrays so that similar materials have similar index (and thus, colour)
 idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
-for n in range(10000):
+for n in range(1000):
     newidx = shuffle(idx, random_state=n)
     newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
     if 'bestmetric' not in locals() or newmetric < bestmetric:
         bestidx = newidx
         bestmetric = newmetric
-    print(bestmetric, newmetric)
+    #print(bestmetric, newmetric)
 kmeans.cluster_centers_ = kmeans.cluster_centers_[bestidx]
 label_dict = dict(zip(bestidx, idx))
 labels = [label_dict[x] for x in labels]
