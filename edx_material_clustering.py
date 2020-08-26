@@ -59,6 +59,7 @@ input_layers = np.dstack(input_layers)
 
 
 
+# TODO try https://scikit-learn.org/stable/auto_examples/mixture/plot_gmm_covariances.html#sphx-glr-auto-examples-mixture-plot-gmm-covariances-py
 
 # == Clustering (using KMeans algorithm here) ==
 # Load Image and transform to a 2D numpy array.
@@ -91,8 +92,9 @@ kmeans = KMeans(n_clusters=n_colors, random_state=0).fit(pixel_array_sample)
 labels = kmeans.predict(pixel_array)
 
 
-## == Output to a numpy array == 
 
+
+## == Output to a numpy array == 
 palette = np.array([pnip.hsv_to_rgb(i,1,1) for i in np.linspace(0,1,np.max(labels)+1)])
 labels_remapped = palette[labels]
 im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
@@ -113,7 +115,6 @@ labels = [label_dict[x] for x in labels]
 
 labels_remapped = palette[labels]
 im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
-imageio.imsave('edx_raw_remap.png', im_reshaped)
 
 bgim = pnip.safe_imload('~/SEM/LED_reports/LED_reports_2020-06-00/M2/emap200x/I30S.TIF') ## FIXME
 imageio.imsave('edx_wb.png', bgim)
@@ -122,7 +123,7 @@ import scipy.ndimage
 im_resc = np.dstack([scipy.ndimage.zoom(im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
 imageio.imsave('edx_raw_remap_resc.png', im_resc)
 
-im_resc = np.dstack([bgim**.5*scipy.ndimage.zoom(im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
+im_resc = np.dstack([bgim**.5*scipy.ndimage.zoom(3+im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
 imageio.imsave('edx_target.png', im_resc)
 
 #im_resc = np.dstack([np.pad(bgim,[(0,5),(0,0),(0,0)])*np.pad(im_rescbgim,[(0,5),(0,0),(0,0)]))
