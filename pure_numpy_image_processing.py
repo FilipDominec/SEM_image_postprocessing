@@ -50,7 +50,7 @@ def safe_imload(imname):
 def auto_contrast_SEM(image, ignore_bottom_part=0.2):
     # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
     im = image - np.min(image) 
-    return np.clip(im * 256. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 255)
+    return np.clip(im * 1. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 1)
 
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     if weight:

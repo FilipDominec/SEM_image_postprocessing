@@ -62,6 +62,7 @@ from scipy.optimize import differential_evolution
 np.warnings.filterwarnings('ignore')
 
 import pure_numpy_image_processing as pnip
+import annotate_image
 
 def paste_overlay(bgimage, fgimage, shiftvec, color, normalize=np.inf):
     for channel in range(3):
@@ -106,6 +107,8 @@ for image_name in image_names:
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
     paste_overlay(single_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
+    ## TODO:
+    ih = annotate_image.analyze_header_XL30(image_name)
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
@@ -123,9 +126,14 @@ for croppx in range(int(max(composite_output.shape)/2)):
         break
 
 ## TODO first crop, then annotate each image (separately)
-for n,(i,f) in enumerate(channel_outputs): 
-    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'.png')), i[croppx:-croppx,croppx:-croppx,:])
-for n,(i,f) in enumerate(extra_outputs): 
-    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), i[croppx:-croppx,croppx:-croppx,:])
+
+for n,(im,f) in enumerate(channel_outputs): 
+    print('imS', im.shape)
+    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:] * 256, f, ih)
+    print('imS', im.shape)
+    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'_ANNOT2.png')), im)
+    
+for n,(im,f,h) in enumerate(extra_outputs): 
+    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im[croppx:-croppx,croppx:-croppx,:])
 imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), pnip.saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
 imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])

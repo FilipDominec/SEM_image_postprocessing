@@ -49,9 +49,94 @@ def analyze_header_XL30(imname, allow_underscore_alias=True):
                 #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
         return ih
 
-def add_databar_XL30(im, ih):
+def add_databar_XL30(im, imname, ih):
     """
+    Input:
+        * image (as a 2D numpy array), 
+        * its file name, and 
+        * image header from the Siemens XL30 SEM (as a dict)
+
+    Note: 
+        * following keys from the header are used: 
+        * the 'lDetName' parameter changes the behaviour:
+            * auto-scaling colour if "SE"
+            * multi-colouring if 'lDetName'[0] == "CL" and 
+
+    Output: 
+        * the same image a meaningful databar in the image bottom
     """
+
+    print('imS-', im.shape)
+    ## Initialize raster graphics
+    logo_im = imageio.imread(str(pnip.inmydir('logo.png'))) 
+    typecase_dict, ch, cw = pnip.text_initialize()
+
+    ## Preprocess the parameters
+    size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
+    size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
+    if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
+    elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
+    else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
+
+    def extract_sample_author_name(filepath, max_depth=2):
+        """ Our convention is that data from sample 123 measured 25th June 2020 by John Doe are saved into the 
+        '123_JD_200725/' (or its subdirs up to max_depth). This function then analyzes (possibly relative) path of a file 
+        and returns ('123', 'JD')
+        """
+        sample_name, author_name = '', ''
+        for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
+            try: sample_name, author_name = parent.name.split('_')[:2]
+            except ValueError: pass 
+            if sample_name or len(author_name)==2: break
+        return sample_name, author_name
+    sample_name, author_name = extract_sample_author_name(imname)
+
+    ## Prepare the scale bar
+    def round125(n):
+        expo = 10**np.floor(np.log10(n))
+        mant = n/expo
+        if mant > 5: return 5*expo
+        if mant > 2: return 2*expo
+        return 1*expo
+    scale_bar = round125(size_x/4.8) # in μm
+    if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
+    elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
+    else:                    scale_num, scale_unit = scale_bar,        'μm' 
+
+
+    ## Rescale image (and down-scale, if it is high-res and high-magnif)
+    im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY, 
+            downscaletwice = (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
+
+    if detectors.get(ih['lDetName'],'')  not in ('CL',):  
+        im = pnip.auto_contrast_SEM(im)
+
+
+    ## Put the logo & web on the image
+    im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
+    im = pnip.put_image(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
+    xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
+    if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+
+    ## Print the first couple of rows in the databar
+    im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
+        'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+    im = pnip.put_text(im, '{:<.0f} {:}'.format(
+        scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+    im = pnip.put_scale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
+
+    ## Print the second couple of rows in the databar
+    im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
+        float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
+        '{:<.0f}'.format(float(ih['Magnification']))+'×', 
+        size_str), x=xpos, y=im.shape[0]-ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+    im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
+        'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+    im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
+        detectors.get(ih['lDetName'],''), 
+        author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
+        sample_name), x=xpos, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+    return im
 
 
 
@@ -60,76 +145,11 @@ def annotate_individually(imnames):
     for imname in imnames:
         im = imageio.imread(imname) # 
         ih = analyze_header_XL30(imname)
-        #im = add_databar_XL30(im, ih) # TODO
+        im = add_databar_XL30(im, imname, ih)
+        ## TODO: coloured indication of wavelength
 
         try:
-            ## Preprocess the parameters
-            size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
-            size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
-            if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
-            elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
-            else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
-            def extract_sample_author_name(filepath, max_depth=2):
-                """ Our convention is that data from sample 123 measured 25th June 2020 by John Doe are saved into the 
-                '123_JD_200725/' (or its subdirs up to max_depth). This function then analyzes (possibly relative) path of a file 
-                and returns ('123', 'JD')
-                """
-                sample_name, author_name = '', ''
-                for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
-                    try: sample_name, author_name = parent.name.split('_')[:2]
-                    except ValueError: pass 
-                    if sample_name or len(author_name)==2: break
-                return sample_name, author_name
-            sample_name, author_name = extract_sample_author_name(imname)
-
-            ## Prepare the scale bar
-            def round125(n):
-                expo = 10**np.floor(np.log10(n))
-                mant = n/expo
-                if mant > 5: return 5*expo
-                if mant > 2: return 2*expo
-                return 1*expo
-            scale_bar = round125(size_x/4.8) # in μm
-            if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
-            elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
-            else:                    scale_num, scale_unit = scale_bar,        'μm' 
-
-
-            ## Rescale image (and down-scale, if it is high-res and high-magnif)
-            im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY, 
-                    downscaletwice = (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
-
-            if detectors.get(ih['lDetName'],'')  not in ('CL',):  
-                im = pnip.auto_contrast_SEM(im)
-
-
-            ## Put the logo & web on the image
-            im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
-            im = pnip.put_image(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
-            xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-            if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
-
-            ## Print the first couple of rows in the databar
-            im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-                'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
-            im = pnip.put_text(im, '{:<.0f} {:}'.format(
-                scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-            im = pnip.put_scale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
-
-            ## Print the second couple of rows in the databar
-            im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
-                float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
-                '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-                size_str), x=xpos, y=im.shape[0]-ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-            im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-                'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
-            im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-                detectors.get(ih['lDetName'],''), 
-                author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
-                sample_name), x=xpos, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-
-            ## TODO: coloured indication of wavelength
                 
             ## Export image
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
@@ -142,8 +162,6 @@ def annotate_individually(imnames):
             print('Error: image {:} skipped: \n\n'.format(outname), e,traceback.print_exc() ), traceback.print_exc()
             
 if __name__ == '__main__':
-    logo_im = imageio.imread(str(pnip.inmydir('logo.png'))) 
-    typecase_dict, ch, cw = pnip.text_initialize()
     annotate_individually(imnames = sys.argv[1:])
 
 
