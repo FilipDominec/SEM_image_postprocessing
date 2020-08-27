@@ -77,7 +77,7 @@ channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     print('loading', image_name); 
-    newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)))
+    newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=True)
     color_tint = WHITE if is_extra(image_name) else colors.pop()
     max_shift = int(rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment

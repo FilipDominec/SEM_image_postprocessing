@@ -32,7 +32,7 @@ def load_Siemens_BMP(fname):
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
 
-def safe_imload(imname):
+def safe_imload(imname, retouch=False):
     """
     Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Siemens EDX)
 
@@ -44,6 +44,12 @@ def safe_imload(imname):
     except: im = load_Siemens_BMP(imname)
     im = im/256 if np.max(im)<256 else im/65536   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
+
+    if retouch:
+        thr = np.max(im)
+        for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)):
+            mask = (im==thr)
+            im[mask] = np.roll(im, shift, axis)[mask]
     return im
 
 

@@ -11,8 +11,6 @@
 
 print(__doc__)
 import numpy as np
-import matplotlib.pyplot as plt ## TODO get rid of
-import matplotlib.cm ## TODO get rid of
 from sklearn.cluster import KMeans
 #from sklearn.metrics import pairwise_distances_argmin
 #from sklearn.datasets import load_sample_image
@@ -169,6 +167,8 @@ labels = [label_dict[x] for x in labels]
 
 
 ## Generate color coding
+import matplotlib.pyplot as plt ## TODO get rid of
+import matplotlib.cm ## TODO get rid of
 my_palette = matplotlib.cm.gist_rainbow(np.linspace(0, 1, n_colors+1)[:-1])
 
 def recreate_image(codebook, labels, w, h): ## todo: obsolete?
