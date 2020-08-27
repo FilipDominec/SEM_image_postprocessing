@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
-# TODO: but note that imageio.imread did not accept pathlib.Path objects -> convert it to string first!
+# TODO: allow other parameters than wavelength to differ among images!
+#  
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000   # [px]: smaller image will not be downsampled
@@ -68,7 +69,7 @@ def add_databar_XL30(im, imname, ih):
 
     print('imS-', im.shape)
     ## Initialize raster graphics
-    logo_im = imageio.imread(str(pnip.inmydir('logo.png'))) 
+    logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
     typecase_dict, ch, cw = pnip.text_initialize()
 
     ## Preprocess the parameters
@@ -143,14 +144,12 @@ def add_databar_XL30(im, imname, ih):
 ## Load images
 def annotate_individually(imnames):
     for imname in imnames:
-        im = imageio.imread(imname) # 
+        im = pnip.safe_imload(imname) # 
         ih = analyze_header_XL30(imname)
         im = add_databar_XL30(im, imname, ih)
         ## TODO: coloured indication of wavelength
 
         try:
-
-                
             ## Export image
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
             if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 

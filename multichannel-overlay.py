@@ -41,10 +41,9 @@ EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra (
 def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 
 # Image post-processing settings:
-channel_exponent = 1. ## pixelwise exponentiation of image (like gamma curve)
-saturation_enhance = .15
-unsharp_weight = 0 #2 #2
-unsharp_radius = 6
+SATURATION_ENHANCE = .15
+UNSHARP_WEIGHT = 0 #2 #2
+UNSHARP_RADIUS = 6
 
 
 
@@ -64,28 +63,22 @@ np.warnings.filterwarnings('ignore')
 import pure_numpy_image_processing as pnip
 import annotate_image
 
-def paste_overlay(bgimage, fgimage, shiftvec, color, normalize=np.inf):
-    for channel in range(3):
-        vs, hs = shiftvec.astype(int)
-        vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
-        hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
-        bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
-                hc-hs:hc+fgimage.shape[1]-hs, 
-                channel] += np.clip(fgimage**channel_exponent*float(color[channel])/normalize, 0, 1)
-                #fgimage**channel_exponent*float(color[channel]) 
 
 
 
 image_names = sys.argv[1:]
 
-colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
-colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
+#colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
+#colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
+#colors = pnip.rgb_palette(len([s for s in image_names if not is_extra(s)])
+colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1, 1.666, len([s for s in image_names if not is_extra(s)]))] 
+WHITE = [1,1,1]
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     print('loading', image_name); 
     newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)))
-    color = [1,1,1,1] if is_extra(image_name) else colors.pop()
+    color_tint = WHITE if is_extra(image_name) else colors.pop()
     max_shift = int(rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
     newimg_crop = gaussian_filter(newimg, sigma=DECIM*.5)[max_shift:-max_shift-int(newimg.shape[0]*databar_pct):DECIM, max_shift:-max_shift:DECIM]*1.0
@@ -96,19 +89,17 @@ for image_name in image_names:
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new*DECIM, shiftvec_sum))
 
     newimg_processed = pnip.my_affine_tr(        ## Process the new image: sharpening, affine transform, and padding...
-            np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else unsharp_weight), radius=unsharp_radius), 
+            np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else UNSHARP_WEIGHT), radius=UNSHARP_RADIUS), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
     
     if not is_extra(image_name):            ## ... then shifting and adding the image to the composite canvas
         if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-        paste_overlay(composite_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop))
+        pnip.paste_overlay(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop))
 
     ## Export the image individually (either as colored channel, or as an extra image)
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-    paste_overlay(single_output, newimg_processed, shiftvec_sum, color, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
-    (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output,image_name))
-    ## TODO:
-    ih = annotate_image.analyze_header_XL30(image_name)
+    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
+    (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output, image_name, annotate_image.analyze_header_XL30(image_name)))
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
@@ -122,18 +113,19 @@ for image_name in image_names:
 for croppx in range(int(max(composite_output.shape)/2)):
     if not (np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) \
             and np.all(composite_output[croppx,:,:] == 0) and np.all(composite_output[-croppx,:,:] == 0)):
-        print('can crop', croppx)
+        #print('can crop', croppx)
         break
 
-## TODO first crop, then annotate each image (separately)
-
-for n,(im,f) in enumerate(channel_outputs): 
-    print('imS', im.shape)
-    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:] * 256, f, ih)
-    print('imS', im.shape)
+for n,(im,f,ih) in enumerate(channel_outputs): 
+    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih)
     imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'_ANNOT2.png')), im)
     
-for n,(im,f,h) in enumerate(extra_outputs): 
-    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im[croppx:-croppx,croppx:-croppx,:])
-imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), pnip.saturate(composite_output, saturation_enhance=saturation_enhance)[croppx:-croppx,croppx:-croppx,:])
+for n,(im,f,ih) in enumerate(extra_outputs): 
+    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih)
+    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im)
+
+summary_ih = ih ## TODO: extract lambdas (and, todo later other params) and build coloured list
+composite_output /= np.max(composite_output) # normalize all channels
+imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), 
+        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, summary_ih))
 imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])

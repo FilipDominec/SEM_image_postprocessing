@@ -37,10 +37,12 @@ def safe_imload(imname):
     Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Siemens EDX)
 
     Returns:
-        2D numpy array (width x height)
+        single-channel 2D numpy array (width x height) with values between 0.0 and 1.0
+
     """
-    try: im = imageio.imread(imname) * 1.0
-    except: im = load_Siemens_BMP(imname) * 1.0
+    try: im = imageio.imread(str(imname)) 
+    except: im = load_Siemens_BMP(imname)
+    im = im/256 if np.max(im)<256 else im/65536   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
     return im
 
@@ -141,6 +143,23 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False):
 
 
 ## Text/image/drawing overlay routines (todo: check rgb color capability; todo: allow upper/lower indices?)
+
+def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=np.inf, channel_exponent=1.):
+    """ 
+    Image addition (keeps background image) with specified color_tint
+
+    Modifies bgimage in place
+    """
+    for channel in range(3):
+        vs, hs = shiftvec.astype(int)
+        vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
+        hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
+        bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
+                hc-hs:hc+fgimage.shape[1]-hs, 
+                channel] += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
+                #fgimage**channel_exponent*float(color[channel]) 
+
+
 def inmydir(fn): return pathlib.Path(__file__).resolve().parent/fn # finds the basename in the script's dir
 
 def text_initialize(typecase_rel_path='typecase.png'):
@@ -148,7 +167,7 @@ def text_initialize(typecase_rel_path='typecase.png'):
         list(range(0x3b1,0x3c2))+list(range(0x3c3,0x3ca))+[0xd7]]) # basic ASCII table + greek 
 
     try: 
-        typecase_img = imageio.imread(str(inmydir(typecase_rel_path))) 
+        typecase_img = safe_imload(str(inmydir(typecase_rel_path))) 
     except FileNotFoundError:
         print('No type set found. To generate one: \n\t0. (optionally) turn on moderate pixel hinting, but disable ' +\
                 '"RGB sub-pixel hinting" \n\t1. make a screenshot of the line below, \n\t2. convert it to grayscale, '+\
@@ -166,7 +185,7 @@ def put_text(im, text, x, y, cw, ch, typecase_dict, color=1):
     return im
 
 def put_image(im, inserted_img, x, y, color=1):
-    if type(inserted_img) is str: inserted_img = imageio.imread(inserted_img)
+    if type(inserted_img) is str: inserted_img = safe_imload(inserted_img)
     inserted_img = match_wb_and_color(im, inserted_img[:im.shape[0]-y, :im.shape[1]-x]) ## adjust colors and clip if needed
     im[y:y+inserted_img.shape[0], x:x+inserted_img.shape[1]] = inserted_img * color
     return im
@@ -175,7 +194,7 @@ def put_scale(im, x, y, h, xw, color=None):
     """
     Accepts both monochrome (2D) and RGB images (3D array)
     """
-    if color is None: color = 255 if len(im.shape) == 2 else np.ones(im.shape[2])*255
+    if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
     im[y+2:y+h-2,                     x-1:x+1,     ] = color
     im[y+2:y+h-2,                     x-1+xw:x+1+xw] = color
     im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = color
@@ -195,19 +214,30 @@ def match_wb_and_color(im1, im2):
     if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*3)
     return im2
 
-def hsv_to_rgb(h, s, v): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
-    if s == 0.0: return v, v, v
+
+def hsv_to_rgb(h, s=1, v=1, red_norm=1, green_norm=1): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
+    if s == 0.0: return v*red_norm, v*green_norm, v
     i = int(h*6.0) # XXX assume int() truncates!
     f = (h*6.0) - i
     p = v*(1.0 - s)
     q = v*(1.0 - s*f)
     t = v*(1.0 - s*(1.0-f))
     i = i%6
-    if i == 0: return np.array([v*.7, t*.5, p])
-    if i == 1: return np.array([q*.7, v*.5, p])
-    if i == 2: return np.array([p*.7, v*.5, t])
-    if i == 3: return np.array([p*.7, q*.5, v])
-    if i == 4: return np.array([t*.7, p*.5, v])
-    if i == 5: return np.array([v*.7, p*.5, q])
+    if i == 0: return np.array([v*red_norm, t*green_norm, p])
+    if i == 1: return np.array([q*red_norm, v*green_norm, p])
+    if i == 2: return np.array([p*red_norm, v*green_norm, t])
+    if i == 3: return np.array([p*red_norm, q*green_norm, v])
+    if i == 4: return np.array([t*red_norm, p*green_norm, v])
+    if i == 5: return np.array([v*red_norm, p*green_norm, q])
+
+def rgb_palette(n, red_norm=.7, green_norm=.5): # todo stretch hue around orange-yellow-green a bit?
+    return np.array([hsv_to_rgb(i,1,1,red_norm, green_norm) for i in np.linspace(0,1-1/n_colors,n_colors)])
+
+
+
+
+
+
+
 
 
