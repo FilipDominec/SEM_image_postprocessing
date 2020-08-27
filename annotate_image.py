@@ -50,27 +50,69 @@ def analyze_header_XL30(imname, allow_underscore_alias=True):
                 #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
         return ih
 
-def add_databar_XL30(im, imname, ih):
+
+
+def extract_dictkey_that_differs(dict_list, key_filter=None):
+    """
+    Similar to extract_stringpart_that_differs. Searches for the (first) key that leads to a difference among supplied dicts.
+
+    >>> extract_dictkey_that_differs([{'a':10, 'b':5}, {'a':10, 'b':5}, {'a':10, 'b':6}])
+    ('b', [5, 5, 6])
+    """
+    dict_list = list(dict_list)
+    if type(dict_list[0]) == dict:
+        for key in (key_filter if key_filter else dict_list[0].keys()):
+            for dic in dict_list[1:]:
+                if dic[key] != dict_list[0][key]:
+                    return key, [d[key] for d in dict_list]
+    return None, None
+
+def extract_stringpart_that_differs(str_list, arbitrary_field_name=None):
+    """
+    Recognizes alpha- and numeric- parts of a string. Getting a list of such similar strings, finds the part that differs.
+
+    >>> extract_stringpart_that_differs(['10.3K380.TIF', '10.3K400.TIF', '10.3K420.TIF',], arbitrary_field_name=u'λ(nm)'))
+    ('λ(nm)', ('380', '400', '420'))
+    """
+    def split_string_alpha_numeric(name):
+        """
+        >>> split_string_alpha_numeric('10.3K380.TIF')
+        ['10.3', 'K', '380', 'TIF']
+        """
+        return ''.join((l+' ' if (ord(r)-63)*(ord(l)-63)<0 else l) for l,r in zip(name,name[1:]+'_'))[::-1].replace('.',' ',1)[::-1].split()
+    str_list = list(str_list)
+    assert len(str_list)>1
+    assert type(str_list[0]) == str
+    for column in zip(*[split_string_alpha_numeric(name) for name in str_list]):
+        for field in column[1:]:
+            if field != column[0]:
+                return arbitrary_field_name, column
+    return None, None
+
+
+
+def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[]):
     """
     Input:
         * image (as a 2D numpy array), 
         * its file name, and 
         * image header from the Siemens XL30 SEM (as a dict)
-
+            * if it is a list/tuple, additional line sums up the difference
+            * if there is no difference in the headers, it is extracted from the filenames
     Note: 
-        * following keys from the header are used: 
         * the 'lDetName' parameter changes the behaviour:
             * auto-scaling colour if "SE"
             * multi-colouring if 'lDetName'[0] == "CL" and 
+    Note2: 
 
     Output: 
         * the same image a meaningful databar in the image bottom
     """
 
-    print('imS-', im.shape)
     ## Initialize raster graphics
     logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
     typecase_dict, ch, cw = pnip.text_initialize()
+
 
     ## Preprocess the parameters
     size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
@@ -80,8 +122,9 @@ def add_databar_XL30(im, imname, ih):
     else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
     def extract_sample_author_name(filepath, max_depth=2):
-        """ Our convention is that data from sample 123 measured 25th June 2020 by John Doe are saved into the 
-        '123_JD_200725/' (or its subdirs up to max_depth). This function then analyzes (possibly relative) path of a file 
+        """ 
+        This function assumes that data e.g. from sample 123, measured 25th June 2020 by John Doe are saved as
+        '123_JD_200725/' (or its subdirs up to max_depth). It analyzes (possibly relative) path of a file 
         and returns ('123', 'JD')
         """
         sample_name, author_name = '', ''
@@ -91,6 +134,7 @@ def add_databar_XL30(im, imname, ih):
             if sample_name or len(author_name)==2: break
         return sample_name, author_name
     sample_name, author_name = extract_sample_author_name(imname)
+
 
     ## Prepare the scale bar
     def round125(n):
@@ -114,29 +158,38 @@ def add_databar_XL30(im, imname, ih):
 
 
     ## Put the logo & web on the image
-    im = np.pad(im, [(0,ch*4)]+[(0,0)]*(len(im.shape)-1), mode='constant')
-    im = pnip.put_image(im, logo_im, x=0, y=int(im.shape[0]-int(ch*4/2)-logo_im.shape[0]/2))
+    dbartop = im.shape[0] #+ch*(4+len(appendix_lines))
+    im = np.pad(im, [(0,ch*(4+len(appendix_lines)))]+[(0,0)]*(len(im.shape)-1), mode='constant')
+    im = pnip.put_image(im, logo_im, x=0, y=int(dbartop+ch*1))
     xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-    if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+    if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
 
     ## Print the first couple of rows in the databar
     im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-        'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+        'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
     im = pnip.put_text(im, '{:<.0f} {:}'.format(
-        scale_num, scale_unit), x=xpos+cw*49, y=im.shape[0]-ch*4, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-    im = pnip.put_scale(im, xpos+cw*42, im.shape[0]-ch*3, ch, int(scale_bar/size_x*im.shape[1]))
+        scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*1, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+    im = pnip.put_scale(im, xpos+cw*42, dbartop+ch*1, ch, int(scale_bar/size_x*im.shape[1]))
 
     ## Print the second couple of rows in the databar
     im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
         float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
         '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-        size_str), x=xpos, y=im.shape[0]-ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+        size_str), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
     im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-        'Detector', 'Made', 'Sample name'), x=xpos, y=im.shape[0]-ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+        'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
     im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
         detectors.get(ih['lDetName'],''), 
         author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
-        sample_name), x=xpos, y=im.shape[0]-ch, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+        sample_name), x=xpos, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+
+    print('AL', appendix_lines)
+    for nline, line in enumerate(appendix_lines):
+        xcaret = xpos
+        print('LL', line)
+        for color, word in line:
+            im = pnip.put_text(im, word, x=xcaret, y=dbartop+ch*(4+nline), cw=cw, ch=ch, typecase_dict=typecase_dict, color=color)
+            xcaret += cw*len(word)
     return im
 
 

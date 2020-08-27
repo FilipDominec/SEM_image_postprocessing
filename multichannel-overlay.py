@@ -72,6 +72,7 @@ image_names = sys.argv[1:]
 #colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
 #colors = pnip.rgb_palette(len([s for s in image_names if not is_extra(s)])
 colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1, 1.666, len([s for s in image_names if not is_extra(s)]))] 
+colors2 = colors[::-1]
 WHITE = [1,1,1]
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
@@ -125,7 +126,18 @@ for n,(im,f,ih) in enumerate(extra_outputs):
     imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im)
 
 summary_ih = ih ## TODO: extract lambdas (and, todo later other params) and build coloured list
+
+## Generate 5th line in the databar: color coding explanation
+k, vs = annotate_image.extract_dictkey_that_differs(
+        [co[2] for co in channel_outputs], key_filter=['Magnification', 'lDetName', 'flAccV', 'flSpot', 'flWD', 'Magnification'])
+if not k:
+    k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
+dbar_appendix = [[[[.6,.6,.6], 'Color coding by '], [WHITE, k+': ' ], ]]
+for c, v in zip(colors2, vs): dbar_appendix[0].append([c,' '+v]) ## append to 0th line of the appending
+print(dbar_appendix)
+
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), 
-        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, summary_ih))
+        annotate_image.add_databar_XL30( pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, 
+            summary_ih, appendix_lines=dbar_appendix))
 imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])
