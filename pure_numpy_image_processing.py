@@ -15,6 +15,8 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
 import imageio, pathlib
 import numpy as np
 import scipy.signal, scipy.ndimage
+from scipy.ndimage.filters import laplace
+from scipy.signal import correlate2d
 
 # Load the input images
 def load_Siemens_BMP(fname):
@@ -53,9 +55,9 @@ def auto_contrast_SEM(image, ignore_bottom_part=0.2):
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     if weight:
         if len(np.shape(im)) == 3:      # handle channels of colour image separately
-            unsharp = np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
+            unsharp = np.dstack([scipy.ndimage.filters.gaussian_filter(channel, sigma=radius) for channel in im])
         else:
-            unsharp = gaussian_filter(im, sigma=radius)
+            unsharp = scipy.ndimage.filters.gaussian_filter(im, sigma=radius)
         im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
         #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
     return im
@@ -66,8 +68,70 @@ def saturate(im, saturation_enhance):
 
 
 
-## Geometry adjustments specific for Siemens SEM
-def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False):
+## Geometry adjustments
+def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function around scipy's implementation
+    troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner 
+    if np.all(np.isclose(trmatrix, np.eye(2))): return im
+    return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
+
+def find_affine_and_shift(im1, im2, use_affine_transform=True):
+    def find_shift(im1, im2, decim=1):
+        """
+        shifts im2 against im1 so that a best correlation is found, returns a tuple of the pixel shift
+
+        This approach is fast, but asserts the images are shifted only.
+        """
+
+        REL_SMOOTHING = .0025         ## smoothing of the correlation map (not the output), relative to image width
+        #rel_smoothing = False      ## no smoothing of the correlation map
+        plot_correlation  = False    ## diagnostics
+
+        corr = correlate2d(laplace(im1), im2, mode='valid')     ## search for best overlap of edges (~ Laplacian of the image correlation)
+        #cr=1  # post-laplace cropping, there were some edge artifacts
+        lc = np.abs(scipy.ndimage.filters.gaussian_filter(corr, sigma=REL_SMOOTHING*im1.shape[1])) 
+        raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
+        vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)) # centre image
+
+        #import matplotlib.pyplot as plt ## Optional debugging
+        #fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
+        #def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
+        #plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2/decim, lc.shape[0]-vshift_rel*2/decim, 'w')
+        #fig.savefig('correlation_'+image_name.replace('TIF','PNG'), bbox_inches='tight') ## needs basename path fixing
+
+        return np.array([vshift_rel, hshift_rel]), np.eye(2) # shift vector (plus identity affine transform matrix)
+
+
+    def find_affine(im1, im2, verbose=False, max_tr=.1):
+        """
+        optimizes the image overlap through finding not only translation, but also skew/rotation/stretch of the second image 
+
+        im2 should always be smaller than im1, so that displacement still guarantees 100% overlap
+
+        output: 
+            translation vector of the image centres (2)
+            affine transform matrix (2x2)
+        """
+        crop_up     = int(im1.shape[0]/2-im2.shape[0]/2)
+        crop_bottom = int(im1.shape[0]/2-im2.shape[0]/2+.5)
+        crop_left   = int(im1.shape[1]/2-im2.shape[1]/2)
+        crop_right  = int(im1.shape[1]/2-im2.shape[1]/2+.5)
+        def fitf(p): 
+            return -np.abs(np.sum(laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right])*my_affine_tr(im2, p[2:].reshape(2,2), shiftvec=p[:2])))
+
+        bounds = [(-max_shift,max_shift), (-max_shift,max_shift), (1-max_tr, 1+max_tr), (0-max_tr, 0+max_tr),(0-max_tr, 0+max_tr),(1-max_tr, 1+max_tr)]
+        result = differential_evolution(fitf, bounds=bounds)
+        return np.array(result.x[:2]*decim*.999, result.x[2:].reshape(2,2))
+
+    if use_affine_transform:    return find_affine(im1, im2)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
+    else:                       return find_shift(im1, im2)     ## Find the best correlation of both images by brute-force search
+
+def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False): 
+    """
+    Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
+
+    The 'downscaletwice' option is to reduce image sizes when pixels are far smaller than SEM beam resolution. 
+    Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
+    """
     if downscaletwice:
         # note: "order=1" yielded smoothest downscaling, paradoxically
         return scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./pixel_anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1) 
