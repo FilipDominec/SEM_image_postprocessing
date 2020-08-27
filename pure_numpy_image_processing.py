@@ -1,0 +1,149 @@
+#!/usr/bin/python3  
+#-*- coding: utf-8 -*-
+"""
+Pure Numpy Image Editing:
+
+Sometimes it is easier to re-implement procedures with basic tools than to ensure advanced dependencies (like CV2) are met.
+
+An image is represented by a simple numpy array, always having 3 dimensions. These are: 
+            width =  image width
+            height = image height
+            depth =  1 for monochrome image, 3 for R-G-B colour images
+
+"""
+
+import imageio, pathlib
+import numpy as np
+import scipy.signal, scipy.ndimage
+
+# Load the input images
+def load_Siemens_BMP(fname):
+    """ 
+    Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
+    See https://ide.kaitai.io/ for more information on BMP header. 
+    """
+    with open(fname, mode='rb') as file: # first analyze the header
+        fileContent = file.read()
+        ofs, w, h, bpp, compr = [int.from_bytes(fileContent[s:e], byteorder='little', signed=False) for s,e in 
+                ((0x0a,0x0e),(0x12,0x16),(0x16,0x1a),(0x1c,0x1e),(0x1e,0x22))]
+    assert bpp == 8, f'monochrome/LUT image assumed (8 bit per pixel); {fname} has {bpp}bpp'
+    assert compr == 0, 'no decompression algorithm implemented'
+    return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
+
+def safe_imload(imname):
+    """
+    Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Siemens EDX)
+
+    Returns:
+        2D numpy array (width x height)
+    """
+    try: im = imageio.imread(imname) * 1.0
+    except: im = load_Siemens_BMP(imname) * 1.0
+    if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
+    return im
+
+
+
+## Colour adjustments
+def auto_contrast_SEM(image, ignore_bottom_part=0.2):
+    # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
+    im = image - np.min(image) 
+    return np.clip(im * 256. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 255)
+
+def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
+    if weight:
+        if len(np.shape(im)) == 3:      # handle channels of colour image separately
+            unsharp = np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
+        else:
+            unsharp = gaussian_filter(im, sigma=radius)
+        im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
+        #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
+    return im
+
+def saturate(im, saturation_enhance):
+    monochr = np.dstack([np.sum(im, axis=2)]*3)
+    return np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, np.max(im))
+
+
+
+## Geometry adjustments specific for Siemens SEM
+def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False):
+    if downscaletwice:
+        # note: "order=1" yielded smoothest downscaling, paradoxically
+        return scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./pixel_anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1) 
+    else:
+        return scipy.ndimage.zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
+
+
+
+## Text/image/drawing overlay routines (todo: check rgb color capability; todo: allow upper/lower indices?)
+def inmydir(fn): return pathlib.Path(__file__).resolve().parent/fn # finds the basename in the script's dir
+
+def text_initialize(typecase_rel_path='typecase.png'):
+    typecase_str = ''.join([chr(c) for c in list(range(32,127))+list(range(0x391,0x3a2))+list(range(0x3a3, 0x3aa))+\
+        list(range(0x3b1,0x3c2))+list(range(0x3c3,0x3ca))+[0xd7]]) # basic ASCII table + greek 
+
+    try: 
+        typecase_img = imageio.imread(str(inmydir(typecase_rel_path))) 
+    except FileNotFoundError:
+        print('No type set found. To generate one: \n\t0. (optionally) turn on moderate pixel hinting, but disable ' +\
+                '"RGB sub-pixel hinting" \n\t1. make a screenshot of the line below, \n\t2. convert it to grayscale, '+\
+                '\n\t3. crop the text between delimiting blocks and \n\t 4. save it in this folder as typecase.png')
+        print(chr(0x2588)+typecase_str.replace('\\',chr(0x29f5))+chr(0x2588)) # (prevents backslash escaping)
+    ch, cw = typecase_img.shape[0], round(typecase_img.shape[1]/len(typecase_str)) ## character height and width
+    typecase_dict = dict([(c, typecase_img[:,cw*n:cw*n+cw]) for n,c in enumerate(typecase_str)]) ## lookup dict for glyphs
+    return typecase_dict, ch, cw
+
+def put_text(im, text, x, y, cw, ch, typecase_dict, color=1):
+    for n,c in enumerate(text): 
+        if x+cw+cw*n>im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
+        else: 
+            im[y:y+ch, x+cw*n:x+cw*(n+1)] = match_wb_and_color(im, typecase_dict.get(c, typecase_dict['?'])) * color
+    return im
+
+def put_image(im, inserted_img, x, y, color=1):
+    if type(inserted_img) is str: inserted_img = imageio.imread(inserted_img)
+    inserted_img = match_wb_and_color(im, inserted_img[:im.shape[0]-y, :im.shape[1]-x]) ## adjust colors and clip if needed
+    im[y:y+inserted_img.shape[0], x:x+inserted_img.shape[1]] = inserted_img * color
+    return im
+
+def put_scale(im, x, y, h, xw, color=None):
+    """
+    Accepts both monochrome (2D) and RGB images (3D array)
+    """
+    if color is None: color = 255 if len(im.shape) == 2 else np.ones(im.shape[2])*255
+    im[y+2:y+h-2,                     x-1:x+1,     ] = color
+    im[y+2:y+h-2,                     x-1+xw:x+1+xw] = color
+    im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = color
+    return im
+
+def put_hbar(im, x, y, h, xw, color=None):
+    pass
+    # TODO
+
+
+
+
+## Auxiliary
+def match_wb_and_color(im1, im2): 
+    ''' Converts grayscale image 'im2' into a colourful one, and vice versa (the color mode of 'im1' being followed) '''
+    if len(im2.shape) > len(im1.shape): im2 = im2[:,:,0] ## reduce channel depth if needed
+    if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*3)
+    return im2
+
+def hsv_to_rgb(h, s, v): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
+    if s == 0.0: return v, v, v
+    i = int(h*6.0) # XXX assume int() truncates!
+    f = (h*6.0) - i
+    p = v*(1.0 - s)
+    q = v*(1.0 - s*f)
+    t = v*(1.0 - s*(1.0-f))
+    i = i%6
+    if i == 0: return np.array([v*.7, t*.5, p])
+    if i == 1: return np.array([q*.7, v*.5, p])
+    if i == 2: return np.array([p*.7, v*.5, t])
+    if i == 3: return np.array([p*.7, q*.5, v])
+    if i == 4: return np.array([t*.7, p*.5, v])
+    if i == 5: return np.array([v*.7, p*.5, q])
+
+

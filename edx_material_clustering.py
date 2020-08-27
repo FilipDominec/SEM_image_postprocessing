@@ -27,9 +27,9 @@ import pure_numpy_image_processing as pnip
 
 
 # STATIC SETTINGS
-SMOOTHING_PX = 1.0      # higher value -> less jagged material regions, but worse resolution
+SMOOTHING_PX = .7      # higher value -> less jagged material regions, but worse resolution
 
-DENORM_EXP   =  .19      # partial de-normalization: EDX saves images as normalized. The more 
+DENORM_EXP   =  .5      # partial de-normalization: EDX saves images as normalized. The more 
                         # unique levels we count in each image, 
                         # the more EDX signal there was. Select DENORM_EXP = 0 to disable this.
                         # Select DENORM_EXP = 1 for full proportionality, but this seems "too much".
@@ -82,7 +82,7 @@ for n_colors in range(3,len(imnames)+1): # subjectively proposed range of colour
     #print("done in %0.3fs." % (time() - t0))
 scores.sort()
 #_, n_colors = scores[0]
-n_colors = 7 #XXX
+n_colors = 8 #XXX
 #print(scores,n_colors)
 
 
@@ -95,14 +95,15 @@ labels = kmeans.predict(pixel_array)
 
 
 ## == Output to a numpy array == 
-palette = np.array([pnip.hsv_to_rgb(i,1,1) for i in np.linspace(0,1,np.max(labels)+1)])
+palette = np.array([pnip.hsv_to_rgb(i,1,1) for i in np.linspace(0,1-1/n_colors,n_colors)])
+print(palette)
 labels_remapped = palette[labels]
 im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 imageio.imsave('edx_raw.png', im_reshaped)
 
 ## Reorder the cluster and label arrays so that similar materials have similar index (and thus, colour)
 idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
-for n in range(1000):
+for n in range(30000):
     newidx = shuffle(idx, random_state=n)
     newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
     if 'bestmetric' not in locals() or newmetric < bestmetric:
@@ -130,6 +131,15 @@ imageio.imsave('edx_target.png', im_resc)
 #imageio.imsave('edx_target.png', im_resc)
 
 quit() # XXX
+
+
+
+
+
+
+
+
+
 
 
 
