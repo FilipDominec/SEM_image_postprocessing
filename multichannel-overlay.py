@@ -117,27 +117,32 @@ for croppx in range(int(max(composite_output.shape)/2)):
         #print('can crop', croppx)
         break
 
-for n,(im,f,ih) in enumerate(channel_outputs): 
-    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih)
+
+## TODO all exported images should have the same dimensions
+## Generate 5th line in the databar: color coding explanation
+k, vs = annotate_image.extract_dictkey_that_differs([co[2] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
+if not k: k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
+if k is None: print('Warning: aligned images, but found difference in their params nor names')
+
+for n, ((im,f,ih), c, v) in enumerate(zip(channel_outputs, colors2, vs)): 
+    appendix_line = [[.6, 'Single channel for '], [WHITE, k+' = '], [c, v]]
+    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih, appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
     imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'_ANNOT2.png')), im)
     
 for n,(im,f,ih) in enumerate(extra_outputs): 
-    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih)
+    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih, appendix_lines=[[]])
     imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im)
 
-summary_ih = ih ## TODO: extract lambdas (and, todo later other params) and build coloured list
 
-## Generate 5th line in the databar: color coding explanation
-k, vs = annotate_image.extract_dictkey_that_differs(
-        [co[2] for co in channel_outputs], key_filter=['Magnification', 'lDetName', 'flAccV', 'flSpot', 'flWD', 'Magnification'])
-if not k:
-    k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
-dbar_appendix = [[[[.6,.6,.6], 'Color coding by '], [WHITE, k+': ' ], ]]
+summary_ih = channel_outputs[0][2]    ## TODO: extract lambdas (and, todo later other params) and build coloured list
+dbar_appendix = [[[0.6, 'Color channels by '], [WHITE, k+': ' ], [0.6, {'style':'bar','xwidth':50, 'xpitch':60}] ]]
 for c, v in zip(colors2, vs): dbar_appendix[0].append([c,' '+v]) ## append to 0th line of the appending
 print(dbar_appendix)
 
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), 
-        annotate_image.add_databar_XL30( pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, 
+        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, 
             summary_ih, appendix_lines=dbar_appendix))
-imageio.imsave(str(Path(f).parent / 'composite.png'), composite_output[croppx:-croppx,croppx:-croppx,:])
+imageio.imsave(str(Path(f).parent / 'composite.png'), 
+        annotate_image.add_databar_XL30(composite_output[croppx:-croppx,croppx:-croppx,:], f,
+            summary_ih, appendix_lines=dbar_appendix))
