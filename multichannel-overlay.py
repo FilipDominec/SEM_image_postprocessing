@@ -35,6 +35,7 @@ DECIM=2                     ## decimation of images prior to correlation (value 
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
 #databar_pct =  0.01            ##     (when no databar present)
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
+FORCE_DOWNSCALE = 0         ## TODO
 
 EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra
 EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra (and this symbol is removed prior to loading)
@@ -135,14 +136,15 @@ for n,(im,f,ih) in enumerate(extra_outputs):
 
 
 summary_ih = channel_outputs[0][2]    ## TODO: extract lambdas (and, todo later other params) and build coloured list
-dbar_appendix = [[[0.6, 'Color channels by '], [WHITE, k+': ' ], [0.6, {'style':'bar','xwidth':50, 'xpitch':60}] ]]
+dbar_appendix = [[[0.6, 'Color channels by '], [WHITE, k+': ' ] ]]
 for c, v in zip(colors2, vs): dbar_appendix[0].append([c,' '+v]) ## append to 0th line of the appending
 print(dbar_appendix)
 
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), 
         annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, 
-            summary_ih, appendix_lines=dbar_appendix))
+            summary_ih, appendix_lines=dbar_appendix, 
+            ))
 imageio.imsave(str(Path(f).parent / 'composite.png'), 
         annotate_image.add_databar_XL30(composite_output[croppx:-croppx,croppx:-croppx,:], f,
             summary_ih, appendix_lines=dbar_appendix))

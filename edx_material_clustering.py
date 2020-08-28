@@ -127,15 +127,30 @@ labels = [label_dict[x] for x in labels]
 labels_remapped = palette[labels]
 im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 
-bgim = pnip.safe_imload('~/SEM/LED_reports/LED_reports_2020-06-00/M2/emap200x/I30S.TIF') ## FIXME
-imageio.imsave('edx_wb.png', bgim)
+BG_GAMMA_CURVE = 0.5        # use 1 for linear colour scaling; use cca 0.5 to enhance color hue visibility in the shadows
+FG_DESATURATE  = 3          # use 0 for full saturation; use e.g. 3 for better visibility of the underlying SEM image
+bgim_name = [n for n in sys.argv if '.TIF' in n]
+if bgim_name:
+    bg_header = annotate_image.analyze_header_XL30(bgim_name)
+    bgim = pnip.safe_imload(bgim_name) ## FIXME
+    imageio.imsave('edx_wb.png', bgim)
 
-import scipy.ndimage
-im_resc = np.dstack([scipy.ndimage.zoom(im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
-imageio.imsave('edx_raw_remap_resc.png', im_resc)
+    import scipy.ndimage
+    im_resc = np.dstack([scipy.ndimage.zoom(im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)]) #todo use pnip
+    imageio.imsave('edx_raw_remap_resc.png', im_resc)
+    
 
-im_resc = np.dstack([bgim**.5*scipy.ndimage.zoom(3+im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
-imageio.imsave('edx_target.png', im_resc)
+    im_resc = np.dstack([bgim**BG_GAMMA_CURVE*scipy.ndimage.zoom(FG_CONTRAST_REDUCTION+im_reshaped[:,:,ch], [bgim.shape[i]/im_reshaped.shape[i] for i in range(2)], order=1) for ch in range(3)])
+    imageio.imsave('edx_target.png', im_resc)
+
+    ## TODO shift the fg image by -19 px left (or fit it?)
+
+    ## TODO bar test
+    imageio.imsave(str(Path(f).parent / 'target_annot.png'), 
+            annotate_image.add_databar_XL30(composite_output[croppx:-croppx,croppx:-croppx,:], f,
+                underlay_header, appendix_lines=dbar_appendix,
+                #appendix_bars = [[{'style':'bar','xwidth':50, 'xpitch':60, 'color':0.6}, {'style':'bar','xwidth':30, 'xpitch':60, 'color':[.2,.5,.9]}]] # TODO
+                )
 
 #im_resc = np.dstack([np.pad(bgim,[(0,5),(0,0),(0,0)])*np.pad(im_rescbgim,[(0,5),(0,0),(0,0)]))
 #imageio.imsave('edx_target.png', im_resc)
