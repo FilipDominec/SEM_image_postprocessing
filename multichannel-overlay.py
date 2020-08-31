@@ -47,12 +47,14 @@ UNSHARP_WEIGHT = 0 #2 #2
 UNSHARP_RADIUS = 6
 
 
-
+try:
+    from IPython import get_ipython
+    get_ipython().magic('reset -sf')
+except:
+    pass
 
 ## Import common moduli
 import sys, os, time, collections, imageio
-import matplotlib, matplotlib.cm ## TODO rm dep
-print(matplotlib.cm)
 from pathlib import Path 
 import numpy as np
 from scipy.signal import convolve2d
@@ -76,7 +78,7 @@ colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1, 1.666, len([s for s in i
 colors2 = colors[::-1]
 WHITE = [1,1,1]
 channel_outputs, extra_outputs = [], []
-shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
+shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     print('loading', image_name); 
     newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=True)
