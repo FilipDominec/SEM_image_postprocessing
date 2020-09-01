@@ -29,15 +29,15 @@ TODOs:
 
 # Settings for correlation of images:
 DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
-USE_AFFINE_TRANSFORM = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
-rel_max_shift=.05           ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
-DECIM=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
+USE_AFFINE_TRANSFORM = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+rel_max_shift=.10          ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
+DECIM=5                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
 #databar_pct =  0.01            ##     (when no databar present)
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 FORCE_DOWNSCALE = 0         ## TODO
 
-EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra
+EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
 EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra (and this symbol is removed prior to loading)
 def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 
@@ -59,8 +59,6 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import convolve2d
 from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage import affine_transform, zoom
-from scipy.optimize import differential_evolution
 np.warnings.filterwarnings('ignore')
 
 import pure_numpy_image_processing as pnip
@@ -74,13 +72,14 @@ image_names = sys.argv[1:]
 #colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
 #colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
 #colors = pnip.rgb_palette(len([s for s in image_names if not is_extra(s)])
-colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1, 1.666, len([s for s in image_names if not is_extra(s)]))] 
+n_color_channels = len([s for s in image_names if not is_extra(s)])
+colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
 colors2 = colors[::-1]
 WHITE = [1,1,1]
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
-    print('loading', image_name); 
+    print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=True)
     color_tint = WHITE if is_extra(image_name) else colors.pop()
     max_shift = int(rel_max_shift*newimg.shape[0])
@@ -88,8 +87,8 @@ for image_name in image_names:
     newimg_crop = gaussian_filter(newimg, sigma=DECIM*.5)[max_shift:-max_shift-int(newimg.shape[0]*databar_pct):DECIM, max_shift:-max_shift:DECIM]*1.0
 
     if 'refimg' in locals() and not DISABLE_TRANSFORM: ## the first image will be simply put to centre (nothing to align against)
-        shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(refimg_crop, newimg_crop, use_affine_transform=USE_AFFINE_TRANSFORM)
-        shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new*DECIM,  trmatrix_sum + trmatrix_new - np.eye(2)
+        shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(refimg_crop, newimg_crop, max_shift=max_shift, decim=DECIM, use_affine_transform=USE_AFFINE_TRANSFORM)
+        shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + trmatrix_new - np.eye(2)
         print('... is shifted by {:}px against the previous one and by {:}px against the first one'.format(shiftvec_new*DECIM, shiftvec_sum))
 
     newimg_processed = pnip.my_affine_tr(        ## Process the new image: sharpening, affine transform, and padding...
