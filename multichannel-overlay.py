@@ -99,7 +99,8 @@ for image_name in image_names:
 
     ## Export the image individually (either as colored channel, or as an extra image)
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
+    #pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
+    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.sum(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output, image_name, annotate_image.analyze_header_XL30(image_name)))
 
     if not consecutive_alignment:   ## optionally, search alignment against the very first image
