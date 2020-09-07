@@ -76,8 +76,16 @@ def extract_stringpart_that_differs(str_list, arbitrary_field_name=None):
     """
     def split_string_alpha_numeric(name):
         """
+        Splits a string into minimum number of chunks, so that each chunk either
+        1) contains number-like characters [ASCII number less than ord("A")], or,
+        2) contains letter-like characters [ASCII number equal or more than ord("A")].
+        Additionally, underscore _ is always split, serving as a forced separator.
+        Last dot is split, too, as it usually separates file name extension.
+        Number- and letter-like chunks are returned in a list of strings (no conversion).
         >>> split_string_alpha_numeric('10.3K380.TIF')
         ['10.3', 'K', '380', 'TIF']
+        >>> split_string_alpha_numeric('10.3K3_80.TIF')
+        ['10.3', 'K', '3', '80', 'TIF']
         """
         return ''.join((l+' ' if (ord(r)-63)*(ord(l)-63)<0 else l) for l,r in zip(name,name[1:]+'_'))[::-1].replace('.',' ',1)[::-1].split()
     str_list = list(str_list)
