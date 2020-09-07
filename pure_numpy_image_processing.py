@@ -236,7 +236,7 @@ def hsv_to_rgb(h, s=1, v=1, red_norm=1, green_norm=1): ## adapted from https://d
     if i == 4: return np.array([t*red_norm, p*green_norm, v])
     if i == 5: return np.array([v*red_norm, p*green_norm, q])
 
-def rgb_palette(n, red_norm=.7, green_norm=.5): # todo stretch hue around orange-yellow-green a bit?
+def rgb_palette(n_colors, red_norm=.7, green_norm=.5): # todo stretch hue around orange-yellow-green a bit?
     return np.array([hsv_to_rgb(i,1,1,red_norm, green_norm) for i in np.linspace(0,1-1/n_colors,n_colors)])
 
 

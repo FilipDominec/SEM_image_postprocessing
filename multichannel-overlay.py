@@ -129,7 +129,7 @@ summary_ih = ih ## TODO: extract lambdas (and, todo later other params) and buil
 
 ## Generate 5th line in the databar: color coding explanation
 k, vs = annotate_image.extract_dictkey_that_differs(
-        [co[2] for co in channel_outputs], key_filter=['Magnification', 'lDetName', 'flAccV', 'flSpot', 'flWD', 'Magnification'])
+        [co[2] for co in channel_outputs], key_filter=['Magnification', 'lDetName', 'flAccV'])
 if not k:
     k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
 dbar_appendix = [[[[.6,.6,.6], 'Color coding by '], [WHITE, k+': ' ], ]]

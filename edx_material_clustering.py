@@ -95,7 +95,7 @@ labels = kmeans.predict(pixel_array)
 ## == Output to a numpy array == 
 palette = np.array([pnip.hsv_to_rgb(i,1,1) for i in np.linspace(0,1-1/n_colors,n_colors)])
 print(palette)
-labels_remapped = pnip.rgb_palette(n=n_colors)[labels]
+labels_remapped = pnip.rgb_palette(n_colors=n_colors)[labels]
 im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 imageio.imsave('edx_raw.png', im_reshaped)
 
