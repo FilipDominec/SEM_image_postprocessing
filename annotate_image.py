@@ -99,7 +99,7 @@ def extract_stringpart_that_differs(str_list, arbitrary_field_name=None):
 
 
 
-def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[]):
+def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[]):
     """
     Input:
         * image (as a 2D numpy array), 
@@ -167,7 +167,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[]):
 
     ## Put the logo & web on the image
     dbartop = im.shape[0] #+ch*(4+len(appendix_lines))
-    im = np.pad(im, [(0,ch*(4+len(appendix_lines)))]+[(0,0)]*(len(im.shape)-1), mode='constant')
+    im = np.pad(im, [(0,ch*(4+len(appendix_lines))+int(ch/2)*len(appendix_bars))]+[(0,0)]*(len(im.shape)-1), mode='constant')
     im = pnip.put_image(im, logo_im, x=0, y=int(dbartop+ch*1))
     xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
     if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
@@ -176,14 +176,14 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[]):
     im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
         'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
     im = pnip.put_text(im, '{:<.0f} {:}'.format(
-        scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*1, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+        scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
     im = pnip.put_scale(im, xpos+cw*42, dbartop+ch*1, ch, int(scale_bar/size_x*im.shape[1]))
-
-    ## Print the second couple of rows in the databar
     im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
         float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
         '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-        size_str), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+        size_str), x=xpos, y=dbartop+ch*1, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+
+    ## Print the second couple of rows in the databar
     im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
         'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
     im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
@@ -191,13 +191,27 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[]):
         author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
         sample_name), x=xpos, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
 
-    print('AL', appendix_lines)
     for nline, line in enumerate(appendix_lines):
         xcaret = xpos
-        print('LL', line)
-        for color, word in line:
-            im = pnip.put_text(im, word, x=xcaret, y=dbartop+ch*(4+nline), cw=cw, ch=ch, typecase_dict=typecase_dict, color=color)
-            xcaret += cw*len(word)
+        for color, content in line:
+            #if type(content) == str:
+            im = pnip.put_text(im, content, x=xcaret, y=dbartop+ch*(4+nline), cw=cw, ch=ch, typecase_dict=typecase_dict, color=color)
+            xcaret += cw*len(content)
+    for nline, barline in enumerate(appendix_bars):
+        xcaret = xpos
+        for bar in barline:
+            print('Co', content)
+            # TODO test - draw a bar --> pnip.
+            def put_bar(im, x, y, h, xw, color=None):
+                if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
+                im[y+2:y+h-2, x-1:x+xw] = color
+                return im
+            if type(bar) == dict and bar.get('style') == 'bar':
+                print('BL',barline)
+                im = put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/200)*nline, h=int(ch/2)-2, xw=bar.get('xwidth'), color=bar.get('color',1))
+                #im = put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/2)*nline, h=int(ch/2)-1, xw=content.get('xwidth'))
+                xcaret += bar.get('xpitch')
+
     return im
 
 

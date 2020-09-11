@@ -1,4 +1,4 @@
-#!/usr/bin/python3  
+    #!/usr/bin/python3  
 #-*- coding: utf-8 -*-
 """
 Pure Numpy Image Editing:
@@ -17,6 +17,8 @@ import numpy as np
 import scipy.signal, scipy.ndimage
 from scipy.ndimage.filters import laplace
 from scipy.signal import correlate2d
+from scipy.ndimage import affine_transform, zoom
+from scipy.optimize import differential_evolution
 
 # Load the input images
 def load_Siemens_BMP(fname):
@@ -71,8 +73,10 @@ def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     return im
 
 def saturate(im, saturation_enhance):
+    orig_max = np.max(im)
     monochr = np.dstack([np.sum(im, axis=2)]*3)
-    return np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, np.max(im))
+    satu = np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, orig_max) # prevent negative values / overshoots
+    return satu / np.max(satu) * orig_max ## keep peak brightness if too dim
 
 
 
@@ -82,8 +86,8 @@ def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function ar
     if np.all(np.isclose(trmatrix, np.eye(2))): return im
     return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
 
-def find_affine_and_shift(im1, im2, use_affine_transform=True):
-    def find_shift(im1, im2, decim=1):
+def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True):
+    def find_shift(im1, im2, max_shift, decim):
         """
         shifts im2 against im1 so that a best correlation is found, returns a tuple of the pixel shift
 
@@ -106,10 +110,10 @@ def find_affine_and_shift(im1, im2, use_affine_transform=True):
         #plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2/decim, lc.shape[0]-vshift_rel*2/decim, 'w')
         #fig.savefig('correlation_'+image_name.replace('TIF','PNG'), bbox_inches='tight') ## needs basename path fixing
 
-        return np.array([vshift_rel, hshift_rel]), np.eye(2) # shift vector (plus identity affine transform matrix)
+        return np.array([vshift_rel, hshift_rel])*decim, np.eye(2) # shift vector (plus identity affine transform matrix)
 
 
-    def find_affine(im1, im2, verbose=False, max_tr=.1):
+    def find_affine(im1, im2, max_shift, decim, max_tr=.1, verbose=False):
         """
         optimizes the image overlap through finding not only translation, but also skew/rotation/stretch of the second image 
 
@@ -128,10 +132,10 @@ def find_affine_and_shift(im1, im2, use_affine_transform=True):
 
         bounds = [(-max_shift,max_shift), (-max_shift,max_shift), (1-max_tr, 1+max_tr), (0-max_tr, 0+max_tr),(0-max_tr, 0+max_tr),(1-max_tr, 1+max_tr)]
         result = differential_evolution(fitf, bounds=bounds)
-        return np.array(result.x[:2]*decim*.999, result.x[2:].reshape(2,2))
+        return np.array(result.x[:2]*decim*.999), np.array(result.x[2:].reshape(2,2))
 
-    if use_affine_transform:    return find_affine(im1, im2)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
-    else:                       return find_shift(im1, im2)     ## Find the best correlation of both images by brute-force search
+    if use_affine_transform:    return find_affine(im1, im2, max_shift, decim)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
+    else:                       return find_shift(im1, im2, max_shift, decim)     ## Find the best correlation of both images by brute-force search
 
 def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False): 
     """
@@ -148,7 +152,7 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False):
 
 
 
-## Text/image/drawing overlay routines (todo: check rgb color capability; todo: allow upper/lower indices?)
+## Text/image/drawing overlay routines
 
 def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=np.inf, channel_exponent=1.):
     """ 
@@ -160,6 +164,7 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=np.inf, chan
         vs, hs = shiftvec.astype(int)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
+        #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
         bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel] += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
@@ -221,7 +226,7 @@ def match_wb_and_color(im1, im2):
     return im2
 
 
-def hsv_to_rgb(h, s=1, v=1, red_norm=1, green_norm=1): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
+def hsv_to_rgb(h, s=1, v=1, red_norm=.9, green_norm=.8): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
     if s == 0.0: return v*red_norm, v*green_norm, v
     i = int(h*6.0) # XXX assume int() truncates!
     f = (h*6.0) - i
