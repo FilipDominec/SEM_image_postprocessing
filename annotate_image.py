@@ -200,7 +200,6 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     for nline, barline in enumerate(appendix_bars):
         xcaret = xpos
         for bar in barline:
-            print('Co', content)
             # TODO test - draw a bar --> pnip.
             def put_bar(im, x, y, h, xw, color=None):
                 if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.

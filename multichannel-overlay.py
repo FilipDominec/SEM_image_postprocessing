@@ -114,11 +114,12 @@ for image_name in image_names:
         refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*databar_pct):DECIM, ::DECIM]*1.0
 
 ## Crop all images identically, according to the extent of unused black margins in the composite image # TODO indep cropping on X and Y
-for croppx in range(int(max(composite_output.shape)/2)):
-    if not (np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) \
-            and np.all(composite_output[croppx,:,:] == 0) and np.all(composite_output[-croppx,:,:] == 0)):
-        #print('can crop', croppx)
-        break
+crop_black_borders(im, return_indices_only=False):
+    """
+    Note that np.ix_(..) serves to adjust t0,t1 dimensions for *rectangular* indexing (instead of *diagonal* one)
+    """
+    t1, t0 = [np.any(im!=0, axis=axis) for axis in range(2)]
+    return np.ix_(t0,t1) if return_indices_only else im[np.ix_(t0,t1)] 
 
 
 ## TODO all exported images should have the same dimensions
@@ -127,13 +128,16 @@ k, vs = annotate_image.extract_dictkey_that_differs([co[2] for co in channel_out
 if not k: k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
 if k is None: print('Warning: aligned images, but found difference in their params nor names')
 
+t0,t1 = crop_black_borders(composite_output, return_indices_only=True)
+print('INDICES', t0,t1)
+
 for n, ((im,f,ih), c, v) in enumerate(zip(channel_outputs, colors2, vs)): 
     appendix_line = [[.6, 'Single channel for '], [WHITE, k+' = '], [c, v]]
-    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih, appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
+    im = annotate_image.add_databar_XL30(im[t0,t1,:], f, ih, appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
     imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'_ANNOT2.png')), im)
     
 for n,(im,f,ih) in enumerate(extra_outputs): 
-    im = annotate_image.add_databar_XL30(im[croppx:-croppx,croppx:-croppx,:], f, ih, appendix_lines=[[]])
+    im = annotate_image.add_databar_XL30(im[t0,t1,:], f, ih, appendix_lines=[[]])
     imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im)
 
 

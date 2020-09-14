@@ -101,14 +101,15 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True)
         corr = correlate2d(laplace(im1), im2, mode='valid')     ## search for best overlap of edges (~ Laplacian of the image correlation)
         #cr=1  # post-laplace cropping, there were some edge artifacts
         lc = np.abs(scipy.ndimage.filters.gaussian_filter(corr, sigma=REL_SMOOTHING*im1.shape[1])) 
+
         raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
         vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)) # centre image
 
-        #import matplotlib.pyplot as plt ## Optional debugging
-        #fig, ax = matplotlib.pyplot.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
-        #def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
-        #plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2/decim, lc.shape[0]-vshift_rel*2/decim, 'w')
-        #fig.savefig('correlation_'+image_name.replace('TIF','PNG'), bbox_inches='tight') ## needs basename path fixing
+        import matplotlib.pyplot as plt ## Optional debugging
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
+        def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
+        plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2, lc.shape[0]-vshift_rel*2, 'w')
+        fig.savefig('correlation.png', bbox_inches='tight') ## needs basename path fixing     +image_name.replace('TIF','PNG')
 
         return np.array([vshift_rel, hshift_rel])*decim, np.eye(2) # shift vector (plus identity affine transform matrix)
 
@@ -154,7 +155,7 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False):
 
 ## Text/image/drawing overlay routines
 
-def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=np.inf, channel_exponent=1.):
+def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_exponent=1.):
     """ 
     Image addition (keeps background image) with specified color_tint
 
@@ -164,7 +165,9 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=np.inf, chan
         vs, hs = shiftvec.astype(int)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
-        #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
+        if channel == 0:
+            print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
+            print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
         bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel] += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
@@ -221,8 +224,8 @@ def put_hbar(im, x, y, h, xw, color=None):
 ## Auxiliary
 def match_wb_and_color(im1, im2): 
     ''' Converts grayscale image 'im2' into a colourful one, and vice versa (the color mode of 'im1' being followed) '''
-    if len(im2.shape) > len(im1.shape): im2 = im2[:,:,0] ## reduce channel depth if needed
-    if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*3)
+    if len(im2.shape) > len(im1.shape): im2 = im2[:,:,len(im1.shape)] ## reduce channel depth if needed
+    if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*len(im1.shape))
     return im2
 
 
