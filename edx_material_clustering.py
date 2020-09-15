@@ -112,7 +112,7 @@ im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 
 ## Reorder the cluster and label arrays so that similar materials have similar index (and thus, colour)
 idx = np.arange(len(kmeans.cluster_centers_), dtype=int)
-for n in range(30000):
+for n in range(3000):
     newidx = shuffle(idx, random_state=n)
     newmetric = np.sum((kmeans.cluster_centers_[newidx][:-1]-kmeans.cluster_centers_[newidx][1:])**2)
     if 'bestmetric' not in locals() or newmetric < bestmetric:
@@ -164,7 +164,7 @@ if 'bgim_name' in locals()  and  'lab_name' in locals():
     ## TODO bar test
     bgim_header = annotate_image.analyze_header_XL30(bgim_name)
     composite_annot = annotate_image.add_databar_XL30(composite, sys.argv[1], bgim_header, 
-                # appendix_lines= [[]],
+                appendix_lines= [[]],
                 appendix_bars = [[{'style':'bar','xwidth':50, 'xpitch':60, 'color':0.6}, {'style':'bar','xwidth':30, 'xpitch':60, 'color':[.2,.5,.9]}]] # TODO
                 )
     imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'target_annot.png'), composite_annot)

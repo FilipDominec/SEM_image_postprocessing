@@ -60,7 +60,7 @@ def extract_dictkey_that_differs(dict_list, key_filter=None):
     ('b', [5, 5, 6])
     """
     dict_list = list(dict_list)
-    if type(dict_list[0]) == dict:
+    if isinstance(dict_list[0], dict):
         for key in (key_filter if key_filter else dict_list[0].keys()):
             for dic in dict_list[1:]:
                 if dic[key] != dict_list[0][key]:
@@ -90,7 +90,7 @@ def extract_stringpart_that_differs(str_list, arbitrary_field_name=None):
         return ''.join((l+' ' if (ord(r)-63)*(ord(l)-63)<0 else l) for l,r in zip(name,name[1:]+'_'))[::-1].replace('.',' ',1)[::-1].split()
     str_list = list(str_list)
     assert len(str_list)>1
-    assert type(str_list[0]) == str
+    assert isinstance(str_list[0], str)
     for column in zip(*[split_string_alpha_numeric(name) for name in str_list]):
         for field in column[1:]:
             if field != column[0]:
@@ -205,7 +205,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
                 if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
                 im[y+2:y+h-2, x-1:x+xw] = color
                 return im
-            if type(bar) == dict and bar.get('style') == 'bar':
+            if isinstance(bar, dict) and bar.get('style') == 'bar':
                 print('BL',barline)
                 im = put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/200)*nline, h=int(ch/2)-2, xw=bar.get('xwidth'), color=bar.get('color',1))
                 #im = put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/2)*nline, h=int(ch/2)-1, xw=content.get('xwidth'))

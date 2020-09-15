@@ -175,9 +175,9 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
         vs, hs = shiftvec.astype(int)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
-        if channel == 0:
-            print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
-            print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
+        #if channel == 0:
+            #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
+            #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
         bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel] += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
