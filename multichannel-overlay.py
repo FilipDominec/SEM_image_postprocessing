@@ -29,12 +29,12 @@ TODOs:
 
 # Settings for correlation of images:
 DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
-USE_AFFINE_TRANSFORM = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+USE_AFFINE_TRANSFORM = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.10          ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
-DECIM=5                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
+DECIM=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
 #databar_pct =  0.01            ##     (when no databar present)
-consecutive_alignment = True ## if disabled, images are aligned always to the first one
+CONSECUTIVE_ALIGNMENT = True ## if disabled, images are aligned always to the first one
 FORCE_DOWNSCALE = 0         ## TODO
 
 EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
@@ -102,40 +102,30 @@ for image_name in image_names:
     ## Export the image individually (either as colored channel, or as an extra image)
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
     #pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
-    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.mean(newimg_crop)*2) # todo?  normalize to newimg_crop or single_output? or rm it?
+    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
     (extra_outputs if is_extra(image_name) else channel_outputs).append((single_output, image_name, annotate_image.analyze_header_XL30(image_name)))
 
-    if not consecutive_alignment:   ## optionally, search alignment against the very first image
+    if not CONSECUTIVE_ALIGNMENT:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
     elif is_extra(image_name):      ## extra imgs never affect alignment of further images
         shiftvec_sum, trmatrix_sum = shiftvec_sum - shiftvec_new*DECIM,   trmatrix_sum - (trmatrix_new - np.eye(2)) 
 
-    if 'refimg' not in locals() or (consecutive_alignment and not is_extra(image_name)): ## store the image as a reference
+    if 'refimg' not in locals() or (CONSECUTIVE_ALIGNMENT and not is_extra(image_name)): ## store the image as a reference
         refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*databar_pct):DECIM, ::DECIM]*1.0
 
-## Crop all images identically, according to the extent of unused black margins in the composite image # TODO indep cropping on X and Y
-crop_black_borders(im, return_indices_only=False):
-    """
-    Note that np.ix_(..) serves to adjust t0,t1 dimensions for *rectangular* indexing (instead of *diagonal* one)
-    """
-    t1, t0 = [np.any(im!=0, axis=axis) for axis in range(2)]
-    return np.ix_(t0,t1) if return_indices_only else im[np.ix_(t0,t1)] 
+## Crop all images identically, according to the extent of unused black margins in the composite image
+t0, t1 = pnip.auto_crop_black_borders(composite_output, return_indices_only=True)
 
-
-## TODO all exported images should have the same dimensions
 ## Generate 5th line in the databar: color coding explanation
 k, vs = annotate_image.extract_dictkey_that_differs([co[2] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
 if not k: k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
 if k is None: print('Warning: aligned images, but found difference in their params nor names')
 
-t0,t1 = crop_black_borders(composite_output, return_indices_only=True)
-print('INDICES', t0,t1)
-
 for n, ((im,f,ih), c, v) in enumerate(zip(channel_outputs, colors2, vs)): 
     appendix_line = [[.6, 'Single channel for '], [WHITE, k+' = '], [c, v]]
     im = annotate_image.add_databar_XL30(im[t0,t1,:], f, ih, appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
     imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'_ANNOT2.png')), im)
-    
+
 for n,(im,f,ih) in enumerate(extra_outputs): 
     im = annotate_image.add_databar_XL30(im[t0,t1,:], f, ih, appendix_lines=[[]])
     imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im)
@@ -149,13 +139,12 @@ if not k:
 summary_ih = channel_outputs[0][2]    ## TODO: extract lambdas (and, todo later other params) and build coloured list
 dbar_appendix = [[[0.6, 'Color channels by '], [WHITE, k+': ' ] ]]
 for c, v in zip(colors2, vs): dbar_appendix[0].append([c,' '+v]) ## append to 0th line of the appending
-print(dbar_appendix)
 
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), 
-        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[croppx:-croppx,croppx:-croppx,:], f, 
+        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[t0,t1,:], f, 
             summary_ih, appendix_lines=dbar_appendix, 
             ))
 imageio.imsave(str(Path(f).parent / 'composite.png'), 
-        annotate_image.add_databar_XL30(composite_output[croppx:-croppx,croppx:-croppx,:], f,
+        annotate_image.add_databar_XL30(composite_output[t0,t1,:], f,
             summary_ih, appendix_lines=dbar_appendix))
