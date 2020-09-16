@@ -3,21 +3,12 @@
 
 """
 Author: Filip Dominec; inspired by an example from Robert Layton, Olivier Grisel, Mathieu Blondel
-Installation on Linux (systemwide - run as root):
-  sudo pip3 install -U scikit-learn
+
+Installation of dependencies
+
+  pip3 install -U scikit-learn
 
 License: BSD 3 clause
-
-# todos optional: 
-# * try im_med = ndimage.median_filter(im_noise, 3)
-
-Note this scipt replaces my original approach:
-    mkdir trash; mv *IPR *txt trash; echo "gimp: filter-batch-Batch process [add files]... output-format:PNG [start] [quit] alt-F4 " 
-    gimp; mv *bmp trash; mogrify -colorspace GRAY -normalize -negate -fx 'u*.95' *png;    
-    ~/p/multichannel_image_overlay/annotate_image.py *TIF; mkdir orig; mv *TIF orig/;   
-    convert *NiK.png  *AgL.png *CuK.png -combine -set colorspace sRGB -negate  NiAgCu.png
-    convert *OK.png  *NK.png *SiK.png -combine -set colorspace sRGB -negate  ONSi.png
-    convert *AlK.png  *GaK.png *CK.png -combine -set colorspace sRGB -negate  AlGaC.png
 
 """
 
@@ -169,3 +160,11 @@ if 'bgim_name' in locals()  and  'lab_name' in locals():
                 )
     imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'target_annot.png'), composite_annot)
 
+
+#Note this scipt replaces my original approach:
+    #mkdir trash; mv *IPR *txt trash; echo "gimp: filter-batch-Batch process [add files]... output-format:PNG [start] [quit] alt-F4 " 
+    #gimp; mv *bmp trash; mogrify -colorspace GRAY -normalize -negate -fx 'u*.95' *png;    
+    #~/p/multichannel_image_overlay/annotate_image.py *TIF; mkdir orig; mv *TIF orig/;   
+    #convert *NiK.png  *AgL.png *CuK.png -combine -set colorspace sRGB -negate  NiAgCu.png
+    #convert *OK.png  *NK.png *SiK.png -combine -set colorspace sRGB -negate  ONSi.png
+    #convert *AlK.png  *GaK.png *CK.png -combine -set colorspace sRGB -negate  AlGaC.png

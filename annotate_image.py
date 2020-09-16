@@ -114,7 +114,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     Note2: 
 
     Output: 
-        * the same image a meaningful databar in the image bottom
+        * the same image with a meaningful databar in the image bottom
     """
 
     ## Initialize raster graphics
