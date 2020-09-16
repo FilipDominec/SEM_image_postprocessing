@@ -218,7 +218,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 ## Load images
 def annotate_individually(imnames):
     for imname in imnames:
-        im = pnip.safe_imload(imname) # 
+        print(imname)
+        im = pnip.safe_imload(imname, retouch=True) # 
         ih = analyze_header_XL30(imname)
         im = add_databar_XL30(im, imname, ih)
         ## TODO: coloured indication of wavelength
@@ -227,7 +228,7 @@ def annotate_individually(imnames):
             ## Export image
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
             if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 
-                imageio.imsave(outname, im)
+                imageio.imsave(str(outname), im)
                 print(f"OK: Processed {imname} and exported to {outname}.")
             else: print(f"Warning: file {imname} exists, and overwriting was not allowed. Not saving.")
         except Exception as e: 
