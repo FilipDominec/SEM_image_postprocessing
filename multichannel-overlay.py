@@ -84,44 +84,52 @@ shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2
 for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=True)
+
+    #import scipy.ndimage
+    #newimg = scipy.ndimage.median_filter(newimg, 2)
+
     color_tint = WHITE if is_extra(image_name) else colors.pop()
     max_shift = int(REL_MAX_SHIFT*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
     newimg_crop = gaussian_filter(newimg, sigma=DECIM*.5)[max_shift:-max_shift-int(newimg.shape[0]*DATABAR_PCT):DECIM, max_shift:-max_shift:DECIM]*1.0
 
     if 'refimg' in locals() and not DISABLE_TRANSFORM: ## the first image will be simply put to centre (nothing to align against)
-        shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(refimg_crop, newimg_crop, max_shift=max_shift, decim=DECIM, use_affine_transform=USE_AFFINE_TRANSFORM)
-        shiftvec_sum, trmatrix_sum = shiftvec_sum + shiftvec_new,  trmatrix_sum + (trmatrix_new - np.eye(2))*TRMATRIX_FACTOR
-        print('... is shifted by {:}px against its reference image and by {:}px against the first one'.format(shiftvec_new*DECIM, shiftvec_sum))
+        shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(
+                refimg_crop, newimg_crop, max_shift=max_shift, decim=DECIM, use_affine_transform=USE_AFFINE_TRANSFORM)
+        shiftvec_sum += shiftvec_new 
+        trmatrix_sum += (trmatrix_new - np.eye(2))*TRMATRIX_FACTOR
+        print('... is shifted by {:}px against its reference image and by {:}px against the first one'.format(
+            shiftvec_new*DECIM, shiftvec_sum))
 
     newimg_processed = pnip.my_affine_tr(        ## Process the new image: sharpening, affine transform, and padding...
             np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else UNSHARP_WEIGHT), radius=UNSHARP_RADIUS), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
     
     if not is_extra(image_name):            ## ... then shifting and adding the image to the composite canvas
-        if 'composite_output' not in locals(): composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
+        if 'composite_output' not in locals(): 
+            composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
         pnip.paste_overlay(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.mean(newimg_crop)*6)
 
     ## Export the image individually (either as colored channel, or as an extra image)
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-    #pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.max(newimg_crop)) # todo?  normalize to newimg_crop or single_output? or rm it?
-    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.mean(newimg_crop)*6) # todo?  normalize to newimg_crop or single_output? or rm it?
-    (extra_outputs if is_extra(image_name) else channel_outputs).append({'im':single_output, 'imname':image_name, 'header':annotate_image.analyze_header_XL30(image_name)})
+    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.mean(newimg_crop)*6) 
+    target_output = extra_outputs if is_extra(image_name) else channel_outputs
+    target_output.append({'im':single_output, 'imname':image_name, 'header':annotate_image.analyze_header_XL30(image_name)})
 
     if not CONSECUTIVE_ALIGNMENT:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
-    elif is_extra(image_name):      ## extra imgs never affect alignment of further images
-        shiftvec_sum, trmatrix_sum = shiftvec_sum - shiftvec_new,   trmatrix_sum - (trmatrix_new - np.eye(2))*TRMATRIX_FACTOR
+    elif is_extra(image_name):      ## undo alignment changes (since extra imgs never affect alignment of further images)
+        shiftvec_sum -= shiftvec_new
+        trmatrix_sum -= (trmatrix_new - np.eye(2))*TRMATRIX_FACTOR
 
     if 'refimg' not in locals() or (CONSECUTIVE_ALIGNMENT and not is_extra(image_name)): ## store the image as a reference
         refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*DATABAR_PCT):DECIM, ::DECIM]*1.0
 
 ## Generate 5th line in the databar: color coding explanation
 param_key, param_values = annotate_image.extract_dictkey_that_differs([co['header'] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
-if not param_key: 
-    param_key, param_values = annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs], arbitrary_field_name='λ(nm)')
-if param_key is None: 
-    print('Warning: aligned images, but found difference in their params nor names')
+if not param_values: 
+    param_key, param_values = u'λ(nm)', extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
+assert param_values, 'aligned images, but could not extract a scanned parameter from their header nor names'
 
 
 ## Will crop all images identically - according to the extent of unused black margins in the composite image
@@ -131,12 +139,12 @@ crop_vert, crop_horiz = pnip.auto_crop_black_borders(composite_output, return_in
 ## Export individual channels, 
 for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, colors2, param_values): 
     appendix_line = [[.6, 'Single channel for '], [WHITE, param_key+' = '], [color, param_value]]
-    ch_dict['im'] = annotate_image.add_databar_XL30(im[crop_vert,crop_horiz,:], ch_dict['im'], ch_dict['header'], appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
-    imageio.imsave(str(Path(f).parent / ('channel{:02d}_'.format(n) + Path(f).stem +'_ANNOT2.png')), im)
+    ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:], ch_dict['imname'], ch_dict['header'], appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
+    imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'_ANNOT2.png')), ch_dict['im'])
 
 for n, ch_dict in enumerate(extra_outputs): 
-    im = annotate_image.add_databar_XL30(im[crop_vert,crop_horiz,:], ch_dict['im'], ch_dict['header'], appendix_lines=[[]])
-    imageio.imsave(str(Path(f).parent / ('extra{:02d}_'.format(n) + Path(f).stem.lstrip('+')+ '.png')), im)
+    im = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:], ch_dict['imname'], ch_dict['header'], appendix_lines=[[]])
+    imageio.imsave(str(Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
 
 
 ## Generate 5th line in the databar for all-channel composite images
@@ -145,10 +153,10 @@ dbar_appendix = [[[0.6, 'Composite channels by '], [WHITE, param_key+': ' ] ]]
 for color, param_value in zip(colors2, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
-imageio.imsave(str(Path(f).parent / ('composite_saturate.png')), 
-        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[crop_vert,crop_horiz,:], f, 
+imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate_MedianFilter0px.png')), 
+        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[crop_vert,crop_horiz,:], channel_outputs[0]['imname'], 
             summary_ih, appendix_lines=dbar_appendix, 
             ))
-imageio.imsave(str(Path(f).parent / 'composite.png'), 
-        annotate_image.add_databar_XL30(composite_output[crop_vert,crop_horiz,:], f,
+imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / 'composite.png'), 
+        annotate_image.add_databar_XL30(composite_output[crop_vert,crop_horiz,:], channel_outputs[0]['imname'],
             summary_ih, appendix_lines=dbar_appendix))

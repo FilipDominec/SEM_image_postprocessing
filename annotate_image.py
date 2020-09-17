@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
-# TODO: allow other parameters than wavelength to differ among images!
-#  
+# TODO??: allow other parameters than wavelength to differ among images!
+# Note: visually, any de-noising technique seems to obstruct the scientific
+#   value so no median filters etc. applied. Downscaling makes sense for 
+#   high-magnif imgs, though.
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000   # [px]: smaller image will not be downsampled
@@ -67,11 +69,11 @@ def extract_dictkey_that_differs(dict_list, key_filter=None):
                     return key, [d[key] for d in dict_list]
     return None, None
 
-def extract_stringpart_that_differs(str_list, arbitrary_field_name=None):
+def extract_stringpart_that_differs(str_list):
     """
     Recognizes alpha- and numeric- parts of a string. Getting a list of such similar strings, finds the part that differs.
 
-    >>> extract_stringpart_that_differs(['10.3K380.TIF', '10.3K400.TIF', '10.3K420.TIF',], arbitrary_field_name=u'λ(nm)'))
+    >>> extract_stringpart_that_differs(['10.3K380.TIF', '10.3K400.TIF', '10.3K420.TIF',])
     ('λ(nm)', ('380', '400', '420'))
     """
     def split_string_alpha_numeric(name):
@@ -94,8 +96,8 @@ def extract_stringpart_that_differs(str_list, arbitrary_field_name=None):
     for column in zip(*[split_string_alpha_numeric(name) for name in str_list]):
         for field in column[1:]:
             if field != column[0]:
-                return arbitrary_field_name, column
-    return None, None
+                return column
+    return None # i.e. all strings are the same?
 
 
 
@@ -219,7 +221,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 def annotate_individually(imnames):
     for imname in imnames:
         print(imname)
-        im = pnip.safe_imload(imname, retouch=True) # 
+        im = pnip.safe_imload(imname, retouch=True)
+
         ih = analyze_header_XL30(imname)
         im = add_databar_XL30(im, imname, ih)
         ## TODO: coloured indication of wavelength
