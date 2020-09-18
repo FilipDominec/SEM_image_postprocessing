@@ -44,14 +44,15 @@ def safe_imload(imname, retouch=False):
     """
     try: im = imageio.imread(str(imname)) 
     except: im = load_Siemens_BMP(imname)
-    im = im/256 if np.max(im)<256 else im/65536   ## 16-bit depth images should have at least one pixel over 255
+    im = im/255 if np.max(im)<256 else im/65535   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
     if retouch:
-        thr = np.max(im)
+        thr = np.max(im[:-15])
+        print('thr',thr)
         for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)):
             mask = (im==thr)
-            im[mask] = np.roll(im, shift, axis)[mask]
+            im[mask] = 0  #np.roll(im, shift, axis)[mask]
     return im
 
 

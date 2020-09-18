@@ -27,29 +27,37 @@ detectors = {'0': 'SE', '2':'Si diode', '3':'CL'}
 
 def analyze_header_XL30(imname, allow_underscore_alias=True):
         """ 
-        Analyze the TIFF image header specific for Philips/FEI 30XL Microscope Control software (running under WinNT early 2000s)
+        Analyze the TIFF image header specific for Philips/FEI 30XL Microscope 
+        Control software (running under WinNT early 2000s)
 
         Accepts:
             imname 
                 path to be analyzed
             boolean allow_underscore_alias
-                if set to True and image has no compatible header, try loading it from "_filename" in 
-                the same directory (the image file was perhaps edited)
+                if set to True and image has no compatible header, try loading
+                it from "_filename" in the same directory (the image file was 
+                perhaps edited)
         
-        Returns a dict of all 194 key/value pairs found in the ascii header
+        Returns a dict of all 194 key/value pairs found in the ascii header,
+        or {} if no header is found.
+        
         """
         try:
             with open(imname, encoding = "ISO-8859-1") as of: 
                 # TODO seek for [DatabarData] first, then count the 194 lines!
                 ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
         except:
+            print('Warning: image {:} does not contain readable SEM metadata'.format(imname))
             if not allow_underscore_alias: 
-                print('Error: image {:} does not contain readable SEM metadata, skipping it...'.format(imname))
-                
-            print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
-            with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
-                ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-                #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
+                 print('    skipping it...')
+            else:
+                print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
+                try: 
+                    with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
+                        ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+                        #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
+                except FileNotFoundError: 
+                    return {} ## empty dict 
         return ih
 
 
@@ -62,7 +70,7 @@ def extract_dictkey_that_differs(dict_list, key_filter=None):
     ('b', [5, 5, 6])
     """
     dict_list = list(dict_list)
-    if isinstance(dict_list[0], dict):
+    if isinstance(dict_list[0], dict) and dict_list[0]:
         for key in (key_filter if key_filter else dict_list[0].keys()):
             for dic in dict_list[1:]:
                 if dic[key] != dict_list[0][key]:
@@ -119,23 +127,12 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         * the same image with a meaningful databar in the image bottom
     """
 
-    ## Initialize raster graphics
-    logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
-    typecase_dict, ch, cw = pnip.text_initialize()
-
-
-    ## Preprocess the parameters
-    size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
-    size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
-    if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
-    elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
-    else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
-
     def extract_sample_author_name(filepath, max_depth=2):
         """ 
-        This function assumes that data e.g. from sample 123, measured 25th June 2020 by John Doe are saved as
-        '123_JD_200725/' (or its subdirs up to max_depth). It analyzes (possibly relative) path of a file 
-        and returns ('123', 'JD')
+        This function assumes that directories are named as SS*_AA_YYMMDD/ 
+        where SSSSS is the sample name, AA author and YYMMDD is the date.
+        >>> extract_sample_author_name('./123_JD_200725/')  # to test, make the dir first
+        ('123', 'JD')
         """
         sample_name, author_name = '', ''
         for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
@@ -153,19 +150,19 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         if mant > 5: return 5*expo
         if mant > 2: return 2*expo
         return 1*expo
-    scale_bar = round125(size_x/4.8) # in μm
-    if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
-    elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
-    else:                    scale_num, scale_unit = scale_bar,        'μm' 
 
+
+
+    ## Initialize raster graphics
+    logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
+    typecase_dict, ch, cw = pnip.text_initialize()
 
     ## Rescale image (and down-scale, if it is high-res and high-magnif)
     im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY, 
             downscaletwice = (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
 
-    if detectors.get(ih['lDetName'],'')  not in ('CL',):  
+    if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
         im = pnip.auto_contrast_SEM(im)
-
 
     ## Put the logo & web on the image
     dbartop = im.shape[0] #+ch*(4+len(appendix_lines))
@@ -174,24 +171,36 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
     if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
 
-    ## Print the first couple of rows in the databar
-    im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-        'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
-    im = pnip.put_text(im, '{:<.0f} {:}'.format(
-        scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-    im = pnip.put_scale(im, xpos+cw*42, dbartop+ch*1, ch, int(scale_bar/size_x*im.shape[1]))
-    im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
-        float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
-        '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-        size_str), x=xpos, y=dbartop+ch*1, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+    if ih: 
+        ## Preprocess the parameters
+        size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
+        size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
+        if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
+        elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
+        else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
-    ## Print the second couple of rows in the databar
-    im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-        'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
-    im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-        detectors.get(ih['lDetName'],''), 
-        author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
-        sample_name), x=xpos, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+        ## Print the first couple of rows in the databar
+        im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
+            'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+        im = pnip.put_text(im, '{:<.0f} {:}'.format(
+            scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+        scale_bar = round125(size_x/4.8) # in μm
+        if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
+        elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
+        else:                    scale_num, scale_unit = scale_bar,        'μm' 
+        im = pnip.put_scale(im, xpos+cw*42, dbartop+ch*1, ch, int(scale_bar/size_x*im.shape[1]))
+        im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
+            float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
+            '{:<.0f}'.format(float(ih['Magnification']))+'×', 
+            size_str), x=xpos, y=dbartop+ch*1, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+
+        ## Print the second couple of rows in the databar
+        im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
+            'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+        im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
+            detectors.get(ih['lDetName'],''), 
+            author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
+            sample_name), x=xpos, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
 
     for nline, line in enumerate(appendix_lines):
         xcaret = xpos
