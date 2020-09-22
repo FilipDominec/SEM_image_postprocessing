@@ -10,6 +10,8 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
             height = image height
             depth =  1 for monochrome image, 3 for R-G-B colour images
 
+TODO: check if there is no reasonable alternative, then put all functions from this module into a class
+
 """
 
 import imageio, pathlib
@@ -48,11 +50,9 @@ def safe_imload(imname, retouch=False):
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
     if retouch:
-        thr = np.max(im[:-15])
-        print('thr',thr)
         for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)):
-            mask = (im==thr)
-            im[mask] = 0  #np.roll(im, shift, axis)[mask]
+            mask = (im==np.max(im))
+            im[mask] = np.roll(im, shift, axis)[mask]
     return im
 
 

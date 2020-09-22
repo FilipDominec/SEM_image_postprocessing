@@ -36,6 +36,7 @@ DECIM=2                     ## decimation of images prior to correlation (value 
 # Fine tuning
 DATABAR_PCT = (61./484)     ## relative height of databar at the images' bottom - these must be ignored when searching for correlation
 #DATABAR_PCT =  0.01            ##     (when no databar present, e.g. thanks to retouching)
+RETOUCH_DATABAR = True      ## Full-white, thin-printed databar can be easily identified and retouched
 CONSECUTIVE_ALIGNMENT = True ## if disabled, images are aligned always to the first one
 FORCE_DOWNSCALE = 0         ## TODO
 TRMATRIX_FACTOR = 0.5       ## tuning parameter, theoretically this should be 1.0; 
@@ -85,10 +86,10 @@ channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
-    newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=True)
+    newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=RETOUCH_DATABAR)
 
-    import scipy.ndimage
-    newimg = scipy.ndimage.median_filter(newimg, 2)
+    #import scipy.ndimage
+    #newimg = scipy.ndimage.median_filter(newimg, 2)
 
     color_tint = WHITE if is_extra(image_name) else colors.pop()
     max_shift = int(REL_MAX_SHIFT*newimg.shape[0])

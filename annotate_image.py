@@ -144,22 +144,43 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 
 
     ## Prepare the scale bar
-    def round125(n):
+    def log_floor(n, mantissa_thresholds=(1, 2, 5)):
+        """
+        Rounds a number downwards with regards to a logarithmic scale. By 
+        default, the returned values are one from the following set:
+            ... 0.5, 1.0, 2, 5, 10, 20, 50, 100, ...
+        
+        Rounding to closest power of 10 is obtained simply with 
+            mantissa_thresholds=(1,)
+
+        In electrical engineering, standard resistor values are given by
+            mantissa_thresholds=(1, 1.5, 2.2, 3.3, 4.7, 6.8)
+        >>> log_floor(0.15)
+        0.10000000000000001
+        >>> log_floor(7e23)
+        4.9999999999999999e+23
+        """
         expo = 10**np.floor(np.log10(n))
         mant = n/expo
-        if mant > 5: return 5*expo
-        if mant > 2: return 2*expo
-        return 1*expo
+        print(n,expo,mant)
+        for mant_thr in np.sort(mantissa_thresholds)[::-1]: 
+            if mant>=mant_thr: 
+                return mant_thr * expo
 
 
 
-    ## Initialize raster graphics
+    ## Initialize raster graphics to be put in the image
     logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
     typecase_dict, ch, cw = pnip.text_initialize()
 
-    ## Rescale image (and down-scale, if it is high-res and high-magnif)
-    im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY, 
-            downscaletwice = (im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold))
+    ## Rescale image to make pixels isotropic 
+    ## Down-scale it if pixel size is far smaller than SEM resolution
+    im = pnip.anisotropic_prescale(
+            im, 
+            pixel_anisotropy=PIXEL_ANISOTROPY, 
+            downscaletwice = ((im.shape[1] > downsample_size_threshold) 
+                and (float(ih['Magnification']) >= downsample_magn_threshold))
+            )
 
     if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
         im = pnip.auto_contrast_SEM(im)
@@ -180,14 +201,14 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
         ## Print the first couple of rows in the databar
+        scale_bar = log_floor(size_x/4.8) # in μm
+        if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
+        elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
+        else:                    scale_num, scale_unit = scale_bar,        'μm' 
         im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
             'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
         im = pnip.put_text(im, '{:<.0f} {:}'.format(
             scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-        scale_bar = round125(size_x/4.8) # in μm
-        if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
-        elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
-        else:                    scale_num, scale_unit = scale_bar,        'μm' 
         im = pnip.put_scale(im, xpos+cw*42, dbartop+ch*1, ch, int(scale_bar/size_x*im.shape[1]))
         im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
             float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 

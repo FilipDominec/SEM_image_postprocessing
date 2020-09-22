@@ -119,18 +119,16 @@ EDX_coloring = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 
 BG_GAMMA_CURVE = 0.5        # use 1 for linear colour scaling; use cca 0.5 to enhance color hue visibility in the shadows
 FG_DESATURATE  = 1          # use 0 for full saturation; use e.g. 3 for better visibility of the underlying SEM image
-Sem2EdxZoomCor = 1.04    ## by default, the areas scanned by SEM and consequent EDX mapping were not the same
 
+SEM2EDX_ZOOM_CORR = 1.04    ## by default, the areas scanned by SEM and consequent EDX mapping are not the same
 
 if 'bgim_name' in locals()  and  'lab_name' in locals():
     import scipy.ndimage
 
     bgim = pnip.safe_imload(bgim_name) 
-    print("DEBUG: bgim_name = ", bgim_name, 'shape = ', bgim.shape)
     labim = pnip.safe_imload(lab_name)
-    print("DEBUG: lab_name = ", lab_name, 'shape = ', labim.shape)
-    labim_resc = scipy.ndimage.zoom(labim, [Sem2EdxZoomCor * bgim.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) #todo use pnip
-    print("DEBUG: labim_resc             ", 'shape = ', labim_resc.shape)
+    labim_resc = scipy.ndimage.zoom(labim, [SEM2EDX_ZOOM_CORR * bgim.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) #todo use pnip
+    imageio.imsave('edx_labim_resc.png', labim_resc)
     imageio.imsave('edx_labim_resc.png', labim_resc)
 
     # Find the shift of high quality SEM image against "Lab1" image (i.e. SEM image taken during EDX map)
