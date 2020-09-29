@@ -152,7 +152,7 @@ for n, ch_dict in enumerate(extra_outputs):
 
 ## Generate 5th line in the databar for all-channel composite images
 summary_ih = channel_outputs[0]['header']     # (take the header of the first file, assuming other have their headers identical)
-dbar_appendix = [[[0.6, 'Composite channels by '], [WHITE, param_key+': ' ] ]]
+dbar_appendix = [[[0.6, 'Color by '], [WHITE, param_key+': ' ] ]]
 for color, param_value in zip(colors2, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
