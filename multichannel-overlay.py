@@ -31,13 +31,14 @@ TODOs:
 DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
 USE_AFFINE_TRANSFORM = 1    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
 rel_max_shift=.10          ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
-DECIM=5                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
+DECIM=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 databar_pct = (61./484)     ## relative height of databar at the images' bottom - these are ignored when searching for correlation
 #databar_pct =  0.01            ##     (when no databar present)
 consecutive_alignment = True ## if disabled, images are aligned always to the first one
 FORCE_DOWNSCALE = 0         ## TODO
 
-EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
+#EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
+EXTRA_IMG_IDENT = 'X'   # each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
 EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra (and this symbol is removed prior to loading)
 def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
 
@@ -116,11 +117,10 @@ for image_name in image_names:
 for croppx in range(int(max(composite_output.shape)/2)):
     if not (np.all(composite_output[:,croppx,:] == 0) and np.all(composite_output[:,-croppx,:] == 0) \
             and np.all(composite_output[croppx,:,:] == 0) and np.all(composite_output[-croppx,:,:] == 0)):
-        #print('can crop', croppx)
+        print('can crop', croppx)
         break
 
 
-## TODO all exported images should have the same dimensions
 ## Generate 5th line in the databar: color coding explanation
 k, vs = annotate_image.extract_dictkey_that_differs([co[2] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
 if not k: k, vs = annotate_image.extract_stringpart_that_differs([co[1] for co in channel_outputs], arbitrary_field_name='λ(nm)')
@@ -137,7 +137,7 @@ for n,(im,f,ih) in enumerate(extra_outputs):
 
 
 summary_ih = channel_outputs[0][2]    ## TODO: extract lambdas (and, todo later other params) and build coloured list
-dbar_appendix = [[[0.6, 'Color channels by '], [WHITE, k+': ' ] ]]
+dbar_appendix = [[[0.6, 'Color channels by '], [WHITE, k.lstrip('f').lstrip('l')+': ' ] ]]
 for c, v in zip(colors2, vs): dbar_appendix[0].append([c,' '+v]) ## append to 0th line of the appending
 print(dbar_appendix)
 
