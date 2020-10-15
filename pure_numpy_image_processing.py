@@ -36,6 +36,8 @@ def load_Siemens_BMP(fname):
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
 
+white = [1,1,1]
+
 def safe_imload(imname, retouch=False):
     """
     Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Siemens EDX)

@@ -127,19 +127,21 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         * the same image with a meaningful databar in the image bottom
     """
 
-    def extract_sample_author_name(filepath, max_depth=2):
+    def extract_sample_author_name(filepath, max_depth=3):
         """ 
         This function assumes that directories are named as SS*_AA_YYMMDD/ 
         where SSSSS is the sample name, AA author and YYMMDD is the date.
         >>> extract_sample_author_name('./123_JD_200725/')  # to test, make the dir first
         ('123', 'JD')
         """
-        sample_name, author_name = '', ''
+        sample_name_, author_name_ = '', ''
         for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
-            try: sample_name, author_name = parent.name.split('_')[:2]
+            try: 
+                sample_name_, author_name_ = parent.name.split('_')[:2]
             except ValueError: pass 
-            if sample_name or len(author_name)==2: break
-        return sample_name, author_name
+            if len(author_name_)==2 and author_name_.isupper():
+                return sample_name_, author_name_
+        return '', ''
     sample_name, author_name = extract_sample_author_name(imname)
 
 
@@ -162,7 +164,6 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         """
         expo = 10**np.floor(np.log10(n))
         mant = n/expo
-        print(n,expo,mant)
         for mant_thr in np.sort(mantissa_thresholds)[::-1]: 
             if mant>=mant_thr: 
                 return mant_thr * expo
