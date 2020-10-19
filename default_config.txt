@@ -1,0 +1,29 @@
+
+
+# SETTINGS FOR CORRELATION OF CATHODOLUMINESCENCE IMAGES
+disable_transform       = False     ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
+use_affine_transform    = False     ## enables scaling, tilting and rotating the images; otherwise they are just shifted
+rel_max_shift           =  .10      ## relative border cropped, limits the maximum shift when fitting (higher number results in slower computation)
+decim                   = 5         ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
+
+# FINE TUNING FOR CORRELATION
+#databar_pct            = 0.12      ## relative height of databar at the images' bottom - these must be ignored when searching for correlation
+databar_pct             = 0.01      ##     (set near zero when no databar present, or when it can be retouched)
+retouch_databar         = True      ## Full-white, thin-printed databar can be easily identified and retouched
+consecutive_alignment   = True      ## if disabled, images are aligned always to the first one
+trmatrix_factor         = 1.0       ## tuning parameter, theoretically this should be 1.0; 
+prealign_smooth         =  .5       ## for noisy images, higher than 1 can be better 
+force_downsample        = True      ## for images that are blurry and/or noisy so that halving resolution does not reduce information
+
+# FILE HANDLING
+extra_img_ident         = 'S'       ## each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
+extra_img_label         = '+'       ## each image name preceded by this is treated as extra (and this symbol is removed prior to loading)
+param_in_filename       = u'λ(nm)'  ## if filenames differ in some number, this is the physical quantity that differs
+
+# IMAGE POST-PROCESSING SETTINGS:
+mean_brightness_norm    = 0.5		## If set to 1, images are normalized to mean brightness. Can be fractional.
+max_brightness_norm     = 0.5		## If set to 1, image is normalized to maximum. Can be fractional, can combine with mean_brightness_norm.
+saturation_enhance      =  .15      ## How much is the monochromated image subtracted from the output image
+unsharp_weight          = 0.0       ## 
+unsharp_radius          = 6.0       ## (pixels)
+gamma					= 1.0		## Set to 1.0 for linear color scale; set to e.g. 0.7 to enhance shadows

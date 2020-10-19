@@ -92,7 +92,8 @@ channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
-    newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), retouch=config.retouch_databar)
+    newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
+            retouch=config.retouch_databar)
 
     color_tint = pnip.white if is_extra(image_name) else colors.pop()
     max_shift = int(config.rel_max_shift*newimg.shape[0])
@@ -146,18 +147,21 @@ crop_vert, crop_horiz = pnip.auto_crop_black_borders(composite_output, return_in
 
 ## Export individual channels, 
 igamma = 1 / getattr(config, 'gamma', 1.0) 
+
 for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, colors2, param_values): 
     appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [color, param_value]]
     ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:]**igamma, 
             ch_dict['imname'], 
             ch_dict['header'], 
-            appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
+            appendix_lines=[appendix_line],
+            force_downsample=getattr(config, 'force_downsample', False)) # -> "Single channel for λ(nm) = 123"
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'.png')), ch_dict['im'])
 
 for n, ch_dict in enumerate(extra_outputs): 
     ch_dict['im'] = annotate_image.add_databar_XL30(
             ch_dict['im'][crop_vert,crop_horiz,:]**igamma, ch_dict['imname'], ch_dict['header'], 
-            appendix_lines=[[]])
+            appendix_lines=[[]],
+            force_downsample=getattr(config, 'force_downsample', False))
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
 
 

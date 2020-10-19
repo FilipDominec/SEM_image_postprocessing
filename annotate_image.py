@@ -7,8 +7,6 @@
 #   high-magnif imgs, though.
 # Static user settings
 OVERWRITE_ALLOWED = True
-downsample_size_threshold = 1000   # [px]: smaller image will not be downsampled
-downsample_magn_threshold = 15000  # [×]: lower magnifications will not be downsampled
 
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
@@ -109,7 +107,8 @@ def extract_stringpart_that_differs(str_list):
 
 
 
-def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[]):
+def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[],
+        downsample_size_threshold = 1000, downsample_magn_threshold = 15000, force_downsample=False):
     """
     Input:
         * image (as a 2D numpy array), 
@@ -117,6 +116,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         * image header from the Siemens XL30 SEM (as a dict)
             * if it is a list/tuple, additional line sums up the difference
             * if there is no difference in the headers, it is extracted from the filenames
+        * downsample_size_threshold [px]: smaller image will not be downsampled
+        * downsample_magn_threshold: lower SEM magnifications will not be downsampled
     Note: 
         * the 'lDetName' parameter changes the behaviour:
             * auto-scaling colour if "SE"
@@ -179,8 +180,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     im = pnip.anisotropic_prescale(
             im, 
             pixel_anisotropy=PIXEL_ANISOTROPY, 
-            downscaletwice = ((im.shape[1] > downsample_size_threshold) 
-                and (float(ih['Magnification']) >= downsample_magn_threshold))
+            downscaletwice = force_downsample or ((im.shape[1] > downsample_size_threshold) and 
+                (float(ih['Magnification']) >= downsample_magn_threshold))
             )
 
     if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
