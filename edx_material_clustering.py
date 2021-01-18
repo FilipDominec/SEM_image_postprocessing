@@ -154,7 +154,7 @@ if 'im_SEM_name' in locals()  and  'lab_name' in locals():
     print("DEBUG: EDX_padded = ", EDX_padded.shape)
 
     composite = im_SEM3**BG_GAMMA_CURVE*EDX_padded
-    imageio.imsave('edx_target.png', composite)
+    imageio.imsave('edx_target2021.png', composite)
 
     ## TODO bar test
     im_SEM_header = annotate_image.analyze_header_XL30(im_SEM_name)
@@ -162,7 +162,7 @@ if 'im_SEM_name' in locals()  and  'lab_name' in locals():
                 appendix_lines= [[]],
                 appendix_bars = [[{'style':'bar','xwidth':MAX_SHIFT_LAB2SEM, 'xpitch':60, 'color':0.6}, {'style':'bar','xwidth':30, 'xpitch':60, 'color':[.2,.5,.9]}]] # TODO
                 )
-    imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'target_annot.png'), composite_annot)
+    imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'target_annot2021.png'), composite_annot)
 
 
 #Note this scipt replaces my original approach:

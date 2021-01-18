@@ -35,7 +35,6 @@ except:
 import sys, os, time, collections, imageio
 from pathlib import Path 
 import numpy as np
-from scipy.signal import convolve2d
 from scipy.ndimage.filters import gaussian_filter
 np.warnings.filterwarnings('ignore')
 
@@ -94,6 +93,13 @@ for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
+    newimg = pnip.anisotropic_prescale(
+            newimg, 
+            pixel_anisotropy= getattr(config, 'pixel_anisotropy', 1.0), 
+            downscaletwice = getattr(config, 'force_downsample', 1.0) or 
+                ((im.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
+                (float(ih['Magnification']) >= getattr(config, 'downsample_magn_threshold', 10000)))
+            )
 
     color_tint = pnip.white if is_extra(image_name) else colors.pop()
     max_shift = int(config.rel_max_shift*newimg.shape[0])

@@ -1,4 +1,4 @@
-    #!/usr/bin/python3  
+#!/usr/bin/python3  
 #-*- coding: utf-8 -*-
 """
 Pure Numpy Image Editing:
@@ -142,7 +142,6 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True)
     else:                       return find_shift(im1, im2, max_shift, decim)     ## Find the best correlation of both images by brute-force search
 
 def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False): 
-    print("DEBUG: downscaletwice = ", downscaletwice)
     """
     Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
 

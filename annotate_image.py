@@ -7,7 +7,8 @@
 #   high-magnif imgs, though.
 # Static user settings
 OVERWRITE_ALLOWED = True
-
+downsample_size_threshold = 1000
+downsample_magn_threshold = 15000
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
 
@@ -107,8 +108,7 @@ def extract_stringpart_that_differs(str_list):
 
 
 
-def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[],
-        downsample_size_threshold = 1000, downsample_magn_threshold = 15000, force_downsample=False):
+def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[],):
     """
     Input:
         * image (as a 2D numpy array), 
@@ -174,15 +174,6 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     ## Initialize raster graphics to be put in the image
     logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
     typecase_dict, ch, cw = pnip.text_initialize()
-
-    ## Rescale image to make pixels isotropic 
-    ## Down-scale it if pixel size is far smaller than SEM resolution
-    im = pnip.anisotropic_prescale(
-            im, 
-            pixel_anisotropy=PIXEL_ANISOTROPY, 
-            downscaletwice = force_downsample or ((im.shape[1] > downsample_size_threshold) and 
-                (float(ih['Magnification']) >= downsample_magn_threshold))
-            )
 
     if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
         im = pnip.auto_contrast_SEM(im)
@@ -252,12 +243,21 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 ## Load images
 def annotate_individually(imnames):
     for imname in imnames:
-        print(imname)
+        print(f'Annotating {imname}')
         im = pnip.safe_imload(imname, retouch=True)
 
         ih = analyze_header_XL30(imname)
+
+        ## Rescale image to make pixels isotropic 
+        ## Down-scale it if pixel size is far smaller than SEM resolution
+        im = pnip.anisotropic_prescale(
+                im, 
+                pixel_anisotropy=PIXEL_ANISOTROPY, 
+                downscaletwice = ((im.shape[1] > downsample_size_threshold) and 
+                    (float(ih['Magnification']) >= downsample_magn_threshold))
+                )
+
         im = add_databar_XL30(im, imname, ih)
-        ## TODO: coloured indication of wavelength
 
         try:
             ## Export image
