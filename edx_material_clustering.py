@@ -12,11 +12,24 @@ License: BSD 3 clause
 
 """
 
-BG_GAMMA_CURVE = 0.5        ## use 1 for linear colour scaling; use cca 0.5 to enhance color hue visibility in the shadows
-FG_DESATURATE  = 1          ## use 0 for full saturation; use e.g. 3 for better visibility of the underlying SEM image
+# STATIC SETTINGS
+SMOOTHING_PX = .7       # higher value -> less jagged material regions, but 
+                        # worse accuracy of EDX regions 
+
+DENORM_EXP   =  .5      # partial de-normalization: Siemens EDX saves images as 
+                        # normalized. The more unique levels we count in each 
+                        # image, the more EDX signal there was. Select 
+                        # DENORM_EXP = 1 for full proportionality, but  
+                        # DENORM_EXP = 0.5 seems to give better results.
+
+BG_GAMMA_CURVE = 0.5    # use 1 for linear colour scaling for SEM underlying layer;
+                        # use cca 0.5 to enhance color hue visibility in the shadows
+
+FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite image; 
+                        # use e.g. 3 for better visibility of the underlying SEM image
 
 SEM2EDX_ZOOM_CORR = 1.04    ## , the areas scanned by SEM and consequent EDX mapping are not the same
-MAX_SHIFT_LAB2SEM = MAX_SHIFT_LAB2SEM      ## 
+MAX_SHIFT_LAB2SEM = 30      ## 
 
 print(__doc__)
 import numpy as np
@@ -31,16 +44,6 @@ from scipy.ndimage.filters import gaussian_filter
 import pure_numpy_image_processing as pnip
 import annotate_image
 
-
-# STATIC SETTINGS
-SMOOTHING_PX = .7       # higher value -> less jagged material regions, but 
-                        # worse resolution 
-
-DENORM_EXP   =  .5      # partial de-normalization: EDX saves images as 
-                        # normalized. The more unique levels we count in each 
-                        # image, the more EDX signal there was. Select 
-                        # DENORM_EXP = 1 for full proportionality, but  
-                        # DENORM_EXP = 0.5 seems to give better results.
 
 
 
@@ -60,6 +63,7 @@ for imname in imnames:
     else:
         #try: input_layer = imageio.imread(imname)
         #except: input_layer = load_Siemens_BMP(imname)
+        print("DEBUG: imname = ", imname)
         input_layer = pnip.safe_imload(imname)
         assert len(input_layer.shape) == 2, 'did not expect RGB images from an EDX channel'
 

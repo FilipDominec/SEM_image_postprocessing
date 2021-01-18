@@ -28,6 +28,7 @@ def load_Siemens_BMP(fname):
     Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
+    print("DEBUG: fname = ", fname)
     with open(fname, mode='rb') as file: # first analyze the header
         fileContent = file.read()
         ofs, w, h, bpp, compr = [int.from_bytes(fileContent[s:e], byteorder='little', signed=False) for s,e in 
