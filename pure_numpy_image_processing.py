@@ -28,6 +28,7 @@ def load_Siemens_BMP(fname):
     Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
+    print("DEBUG: fname = ", fname)
     with open(fname, mode='rb') as file: # first analyze the header
         fileContent = file.read()
         ofs, w, h, bpp, compr = [int.from_bytes(fileContent[s:e], byteorder='little', signed=False) for s,e in 
@@ -35,6 +36,8 @@ def load_Siemens_BMP(fname):
     assert bpp == 8, f'monochrome/LUT image assumed (8 bit per pixel); {fname} has {bpp}bpp'
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
+
+white = [1,1,1]
 
 def safe_imload(imname, retouch=False):
     """

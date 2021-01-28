@@ -27,33 +27,6 @@ TODOs:
     * test on windows
 """
 
-## User settings
-
-# Settings for correlation of images:
-DISABLE_TRANSFORM = False   ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
-USE_AFFINE_TRANSFORM = 0    ## enables scaling, tilting and rotating the images; otherwise they are just shifted
-REL_MAX_SHIFT=.15          ## pixels cropped from the second image determine the maximum shift to be detected (higher number results in slower computation)
-DECIM=2                     ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
-
-# Fine tuning
-DATABAR_PCT = (61./484)     ## relative height of databar at the images' bottom - these must be ignored when searching for correlation
-#DATABAR_PCT =  0.01            ##     (when no databar present, e.g. thanks to retouching)
-RETOUCH_DATABAR = True      ## Full-white, thin-printed databar can be easily identified and retouched
-CONSECUTIVE_ALIGNMENT = True ## if disabled, images are aligned always to the first one
-FORCE_DOWNSCALE = 0         ## TODO
-TRMATRIX_FACTOR = 0.5       ## tuning parameter, theoretically this should be 1.0; 
-
-# File handling
-EXTRA_IMG_IDENT = 'S'   # each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
-EXTRA_IMG_LABEL = '+'   # each image name preceded by this is treated as extra (and this symbol is removed prior to loading)
-def is_extra(imname): return (imname[0] == EXTRA_IMG_LABEL or (EXTRA_IMG_IDENT in Path(imname).stem.upper())) ## TODO this should be better defined...
-PARAM_IN_FILENAME = u'λ(nm)'
-
-# Image post-processing settings:
-SATURATION_ENHANCE = .15
-UNSHARP_WEIGHT = 0.0 # #2
-UNSHARP_RADIUS = 6.0
-
 
 try:
     from IPython import get_ipython
@@ -65,7 +38,6 @@ except:
 import sys, os, time, collections, imageio
 from pathlib import Path 
 import numpy as np
-from scipy.signal import convolve2d
 from scipy.ndimage.filters import gaussian_filter
 np.warnings.filterwarnings('ignore')
 
@@ -74,8 +46,43 @@ import annotate_image
 
 
 
+## If no config file found, copy the default one (from the script's own directory)
+import pathlib, sys
+config_file_name = 'config.txt'
+default_config_file_name = 'default_config.txt'
+if not pathlib.Path(config_file_name).is_file():
+    print(f'Creating {config_file_name} as a copy from {default_config_file_name}')
+    with open(config_file_name, 'w') as config_file:
+        config_file.write('input_files = ' + ' '.join(sys.argv[1:]))
+        for line in (pathlib.Path(__file__).resolve().parent/default_config_file_name).read_text():
+            config_file.write(line)
 
-image_names = sys.argv[1:]
+class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on pypi
+    def __init__(self, config_file, splitter='=', commenter='#'): 
+        from ast import literal_eval
+        for n, line in enumerate(pathlib.Path(config_file).read_text().split('\n')):
+            line = line.split(commenter)[0]
+            if line.strip() == "": continue ## skip whitespace or comment-only lines
+
+            try:
+                key, value = line.split(splitter, maxsplit=1) 
+                try: self.__dict__[key.strip()] = literal_eval(value.strip())
+                except SyntaxError: self.__dict__[key.strip()] = value.strip()
+            except ValueError:
+                print(f"Error parsing config file {config_file}, line {n}: '{line}'")
+
+
+config = MyConfig(config_file=config_file_name)
+
+def is_extra(imname): 
+    return (imname[0] == config.extra_img_label 
+            or (config.extra_img_ident.upper() in Path(imname).stem.upper())) 
+
+#for a in dir(config): print(a, getattr(config,a), type(getattr(config,a)))
+
+image_names = sys.argv[1:]  or  getattr(config, 'input_files', '').split()
+#print("DEBUG: image_names = ", image_names)
+
 
 #colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
 #colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
@@ -83,57 +90,63 @@ image_names = sys.argv[1:]
 n_color_channels = len([s for s in image_names if not is_extra(s)])
 colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
 colors2 = colors[::-1]
-WHITE = [1,1,1]
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
-    newimg = pnip.safe_imload(str(Path(image_name).parent / Path(image_name).name.lstrip(EXTRA_IMG_LABEL)), retouch=RETOUCH_DATABAR)
+    newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
+            retouch=config.retouch_databar)
+    newimg = pnip.anisotropic_prescale(
+            newimg, 
+            pixel_anisotropy= getattr(config, 'pixel_anisotropy', 1.0), 
+            downscaletwice = getattr(config, 'force_downsample', 1.0) or 
+                ((im.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
+                (float(ih['Magnification']) >= getattr(config, 'downsample_magn_threshold', 10000)))
+            )
 
-    #import scipy.ndimage
-    #newimg = scipy.ndimage.median_filter(newimg, 2)
-
-    color_tint = WHITE if is_extra(image_name) else colors.pop()
-    max_shift = int(REL_MAX_SHIFT*newimg.shape[0])
+    color_tint = pnip.white if is_extra(image_name) else colors.pop()
+    max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
-    newimg_crop = gaussian_filter(newimg, sigma=DECIM*.5)[max_shift:-max_shift-int(newimg.shape[0]*DATABAR_PCT):DECIM, max_shift:-max_shift:DECIM]*1.0
+    newimg_crop = gaussian_filter(newimg, sigma=config.decim*config.prealign_smooth)[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
 
-    if 'refimg' in locals() and not DISABLE_TRANSFORM: ## the first image will be simply put to centre (nothing to align against)
+    if 'refimg' in locals() and not config.disable_transform: ## the first image will be simply put to centre (nothing to align against)
         shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(
-                refimg_crop, newimg_crop, max_shift=max_shift, decim=DECIM, use_affine_transform=USE_AFFINE_TRANSFORM)
+                refimg_crop, newimg_crop, max_shift=max_shift, decim=config.decim, use_affine_transform=config.use_affine_transform)
         shiftvec_sum += shiftvec_new 
-        trmatrix_sum += (trmatrix_new - np.eye(2))*TRMATRIX_FACTOR
+        trmatrix_sum += (trmatrix_new - np.eye(2))*config.trmatrix_factor
         print('... is shifted by {:}px against its reference image and by {:}px against the first one'.format(
-            shiftvec_new*DECIM, shiftvec_sum))
+            shiftvec_new, shiftvec_sum))
 
     newimg_processed = pnip.my_affine_tr(        ## Process the new image: sharpening, affine transform, and padding...
-            np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else UNSHARP_WEIGHT), radius=UNSHARP_RADIUS), 
+            np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else config.unsharp_weight), radius=config.unsharp_radius), 
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
     
+            
+    img_norm =  np.max(newimg_crop)**(1-config.max_brightness_norm) * (np.mean(newimg_crop)*6)**config.mean_brightness_norm
     if not is_extra(image_name):            ## ... then shifting and adding the image to the composite canvas
         if 'composite_output' not in locals(): 
             composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-        pnip.paste_overlay(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.mean(newimg_crop)*6)
+        pnip.paste_overlay(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm)
 
     ## Export the image individually (either as colored channel, or as an extra image)
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=np.mean(newimg_crop)*6) 
+    pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm) 
     target_output = extra_outputs if is_extra(image_name) else channel_outputs
     target_output.append({'im':single_output, 'imname':image_name, 'header':annotate_image.analyze_header_XL30(image_name)})
 
-    if not CONSECUTIVE_ALIGNMENT:   ## optionally, search alignment against the very first image
+    if not config.consecutive_alignment:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
     elif is_extra(image_name):      ## undo alignment changes (since extra imgs never affect alignment of further images)
         shiftvec_sum -= shiftvec_new
-        trmatrix_sum -= (trmatrix_new - np.eye(2))*TRMATRIX_FACTOR
+        trmatrix_sum -= (trmatrix_new - np.eye(2))*config.trmatrix_factor
 
-    if 'refimg' not in locals() or (CONSECUTIVE_ALIGNMENT and not is_extra(image_name)): ## store the image as a reference
-        refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*DATABAR_PCT):DECIM, ::DECIM]*1.0
+    if 'refimg' not in locals() or (config.consecutive_alignment and not is_extra(image_name)): ## store the image as a reference
+        refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*config.databar_pct):config.decim, ::config.decim]*1.0
 
 ## Generate 5th line in the databar: color coding explanation
 param_key, param_values = annotate_image.extract_dictkey_that_differs([co['header'] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
 if not param_values: 
-    param_key, param_values = PARAM_IN_FILENAME, annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
+    param_key, param_values = config.param_in_filename, annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
 assert param_values, 'aligned images, but could not extract a scanned parameter from their header nor names'
 
 
@@ -142,26 +155,35 @@ crop_vert, crop_horiz = pnip.auto_crop_black_borders(composite_output, return_in
 
 
 ## Export individual channels, 
+igamma = 1 / getattr(config, 'gamma', 1.0) 
+
 for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, colors2, param_values): 
-    appendix_line = [[.6, 'Single channel for '], [WHITE, param_key+' = '], [color, param_value]]
-    ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:], ch_dict['imname'], ch_dict['header'], appendix_lines=[appendix_line]) # -> "Single channel for λ(nm) = 123"
-    imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'_ANNOT2.png')), ch_dict['im'])
+    appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [color, param_value]]
+    ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:]**igamma, 
+            ch_dict['imname'], 
+            ch_dict['header'], 
+            appendix_lines=[appendix_line],
+            force_downsample=getattr(config, 'force_downsample', False)) # -> "Single channel for λ(nm) = 123"
+    imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'.png')), ch_dict['im'])
 
 for n, ch_dict in enumerate(extra_outputs): 
-    ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:], ch_dict['imname'], ch_dict['header'], appendix_lines=[[]])
+    ch_dict['im'] = annotate_image.add_databar_XL30(
+            ch_dict['im'][crop_vert,crop_horiz,:]**igamma, ch_dict['imname'], ch_dict['header'], 
+            appendix_lines=[[]],
+            force_downsample=getattr(config, 'force_downsample', False))
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
 
 
 ## Generate 5th line in the databar for all-channel composite images
 summary_ih = channel_outputs[0]['header']     # (take the header of the first file, assuming other have their headers identical)
-dbar_appendix = [[[0.6, 'Color by '], [WHITE, param_key+': ' ] ]]
+dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
 for color, param_value in zip(colors2, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
-imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate_MedianFilter0px.png')), 
-        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=SATURATION_ENHANCE)[crop_vert,crop_horiz,:], channel_outputs[0]['imname'], 
+imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate.png')), 
+        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=config.saturation_enhance)[crop_vert,crop_horiz,:]**igamma, channel_outputs[0]['imname'], 
             summary_ih, appendix_lines=dbar_appendix, 
             ))
 imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / 'composite.png'), 
-        annotate_image.add_databar_XL30(composite_output[crop_vert,crop_horiz,:], channel_outputs[0]['imname'],
+        annotate_image.add_databar_XL30(composite_output[crop_vert,crop_horiz,:]**igamma, channel_outputs[0]['imname'],
             summary_ih, appendix_lines=dbar_appendix))
