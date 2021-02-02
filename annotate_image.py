@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
-# TODO??: allow other parameters than wavelength to differ among images!
 # Note: visually, any de-noising technique seems to obstruct the scientific
 #   value so no median filters etc. applied. Downscaling makes sense for 
 #   high-magnif imgs, though.
@@ -254,9 +253,9 @@ def annotate_individually(imnames):
         im = pnip.anisotropic_prescale(
                 im, 
                 pixel_anisotropy=PIXEL_ANISOTROPY, 
-                downscaletwice = ((im.shape[1] > downsample_size_threshold) and 
-                    (float(ih['Magnification']) >= downsample_magn_threshold))
                 )
+        if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
+            im = pnip.downscaletwice(im)
 
         im = add_databar_XL30(im, imname, ih)
 
