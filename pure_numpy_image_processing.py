@@ -28,7 +28,6 @@ def load_Siemens_BMP(fname):
     Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
-    print("DEBUG: fname = ", fname)
     with open(fname, mode='rb') as file: # first analyze the header
         fileContent = file.read()
         ofs, w, h, bpp, compr = [int.from_bytes(fileContent[s:e], byteorder='little', signed=False) for s,e in 
@@ -142,18 +141,22 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True)
     if use_affine_transform:    return find_affine(im1, im2, max_shift, decim)    ## Find the optimum affine transform of both images (by fitting 2x2 matrix)
     else:                       return find_shift(im1, im2, max_shift, decim)     ## Find the best correlation of both images by brute-force search
 
-def anisotropic_prescale(im, pixel_anisotropy=1.0, downscaletwice=False): 
+def anisotropic_prescale(im, pixel_anisotropy=1.0): 
     """
     Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
 
-    The 'downscaletwice' option is to reduce image sizes when pixels are far smaller than SEM beam resolution. 
+    """
+    return scipy.ndimage.zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
+
+def downscaletwice(im):
+    """
+    A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
     Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
     """
-    if downscaletwice:
-        # note: "order=1" yielded smoothest downscaling, paradoxically
-        return scipy.ndimage.zoom(scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), [1./pixel_anisotropy/2] + [0.5] + [1]*(len(im.shape)-2), order=1) 
-    else:
-        return scipy.ndimage.zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
+    return scipy.ndimage.zoom(
+            scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), 
+            [0.5, 0.5] + [1]*(len(im.shape)-2), 
+            order=1) 
 
 def auto_crop_black_borders(im, return_indices_only=False):
     """
@@ -206,6 +209,7 @@ def text_initialize(typecase_rel_path='typecase.png'):
     return typecase_dict, ch, cw
 
 def put_text(im, text, x, y, cw, ch, typecase_dict, color=1):
+    print("DEBUG: text = ", text)
     for n,c in enumerate(text): 
         if x+cw+cw*n>im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
         else: 

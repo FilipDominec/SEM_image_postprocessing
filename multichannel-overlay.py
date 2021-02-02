@@ -93,13 +93,15 @@ for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
-    newimg = pnip.anisotropic_prescale(
-            newimg, 
-            pixel_anisotropy= getattr(config, 'pixel_anisotropy', 1.0), 
-            downscaletwice = getattr(config, 'force_downsample', 1.0) or 
-                ((im.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
-                (float(ih['Magnification']) >= getattr(config, 'downsample_magn_threshold', 10000)))
-            )
+    newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 1.0))
+    image_header = annotate_image.analyze_header_XL30(image_name)
+    if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'}
+    print('image_header len', len(image_header))
+
+    if getattr(config, 'force_downsample', 1.0) or \
+            ((newimg.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
+            (float(image_header['Magnification']) >= getattr(config, 'downsample_magn_threshold', 10000))):
+        newimg = pnip.downscaletwice(newimg)
 
     color_tint = pnip.white if is_extra(image_name) else colors.pop()
     max_shift = int(config.rel_max_shift*newimg.shape[0])
@@ -129,7 +131,7 @@ for image_name in image_names:
     single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
     pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm) 
     target_output = extra_outputs if is_extra(image_name) else channel_outputs
-    target_output.append({'im':single_output, 'imname':image_name, 'header':annotate_image.analyze_header_XL30(image_name)})
+    target_output.append({'im':single_output, 'imname':image_name, 'header':image_header})
 
     if not config.consecutive_alignment:   ## optionally, search alignment against the very first image
         shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
@@ -142,6 +144,7 @@ for image_name in image_names:
 
 ## Generate 5th line in the databar: color coding explanation
 param_key, param_values = annotate_image.extract_dictkey_that_differs([co['header'] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
+print(param_key, param_values)
 if not param_values: 
     param_key, param_values = config.param_in_filename, annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
 assert param_values, 'aligned images, but could not extract a scanned parameter from their header nor names'
@@ -160,14 +163,16 @@ for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_o
             ch_dict['imname'], 
             ch_dict['header'], 
             appendix_lines=[appendix_line],
-            force_downsample=getattr(config, 'force_downsample', False)) # -> "Single channel for λ(nm) = 123"
+            #downscaletwice=getattr(config, 'force_downsample', False)
+            ) # -> "Single channel for λ(nm) = 123"
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'.png')), ch_dict['im'])
 
 for n, ch_dict in enumerate(extra_outputs): 
     ch_dict['im'] = annotate_image.add_databar_XL30(
             ch_dict['im'][crop_vert,crop_horiz,:]**igamma, ch_dict['imname'], ch_dict['header'], 
             appendix_lines=[[]],
-            force_downsample=getattr(config, 'force_downsample', False))
+            #downscaletwice=getattr(config, 'force_downsample', False)
+            )
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
 
 

@@ -21,13 +21,13 @@ warnings.filterwarnings("ignore")
 import pure_numpy_image_processing as pnip
 
 ## (microscope-dependent settings)
-detectors = {'0': 'SE', '2':'Si diode', '3':'CL'}
+detectors = {'0': 'SE', '2':'Aux', '3':'CL'}
 
 
 def analyze_header_XL30(imname, allow_underscore_alias=True):
         """ 
-        Analyze the TIFF image header specific for Philips/FEI 30XL Microscope 
-        Control software (running under WinNT early 2000s)
+        Analyze the TIFF image header, which is "specific" for Philips/FEI 30XL 
+        microscope control software (running under WinNT from early 2000s)
 
         Accepts:
             imname 
@@ -69,6 +69,7 @@ def extract_dictkey_that_differs(dict_list, key_filter=None):
     ('b', [5, 5, 6])
     """
     dict_list = list(dict_list)
+    #print("DEBUG: dict_list = ", dict_list)
     if isinstance(dict_list[0], dict) and dict_list[0]:
         for key in (key_filter if key_filter else dict_list[0].keys()):
             for dic in dict_list[1:]:

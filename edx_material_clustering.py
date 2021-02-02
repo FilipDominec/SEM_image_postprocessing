@@ -63,7 +63,6 @@ for imname in imnames:
     else:
         #try: input_layer = imageio.imread(imname)
         #except: input_layer = load_Siemens_BMP(imname)
-        print("DEBUG: imname = ", imname)
         input_layer = pnip.safe_imload(imname)
         assert len(input_layer.shape) == 2, 'did not expect RGB images from an EDX channel'
 
@@ -128,45 +127,49 @@ labels_remapped = palette[labels]
 EDX_coloring = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 
 
-if 'im_SEM_name' in locals()  and  'lab_name' in locals():
-    import scipy.ndimage
+assert 'im_SEM_name' in locals(), 'SEM image missing: specify one *.TIF file in arguments'
+assert 'lab_name' in locals(), '"LAB" (i.e. simultaneous SEM image taken along with EDX) missing: specify one *Lab*.* file in arguments'
 
-    im_SEM = pnip.safe_imload(im_SEM_name) 
-    im_LAB = pnip.safe_imload(lab_name)
-    im_LAB_resize2SEM = scipy.ndimage.zoom(im_LAB, [SEM2EDX_ZOOM_CORR * im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) #todo use pnip
-    imageio.imsave('edx_im_LAB_resize2SEM.png', im_LAB_resize2SEM)
+import scipy.ndimage
 
-    # Find the shift of high quality SEM image against "Lab1" image (i.e. SEM image taken during EDX map)
-    shift, _ = pnip.find_affine_and_shift(
-            im_LAB_resize2SEM[:,:], 
-            im_SEM[MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM,MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM], 
-            max_shift=0.15, 
-            decim=1, 
-            use_affine_transform=False)
-    im_SEM3 = 0 * np.dstack(np.pad(im_SEM, MAX_SHIFT_LAB2SEM, mode='constant') for ch in range(3))[:,:,:]
-    pnip.paste_overlay(im_SEM3, im_SEM, shift, np.array([1,1,1])) # , normalize=np.max(newimg_crop)
+im_SEM = pnip.safe_imload(im_SEM_name) 
+print("DEBUG: im_SEM_name = ", im_SEM_name)
+im_LAB = pnip.safe_imload(lab_name)
+print("DEBUG: lab_name = ", lab_name)
+im_LAB_resize2SEM = scipy.ndimage.zoom(im_LAB, [SEM2EDX_ZOOM_CORR * im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) #todo use pnip
+imageio.imsave('edx_im_LAB_resize2SEM.png', im_LAB_resize2SEM)
 
-    imageio.imsave('edx_im_SEM3.png', im_SEM3)
+# Find the shift of high quality SEM image against "Lab1" image (i.e. SEM image taken during EDX map)
+shift, _ = pnip.find_affine_and_shift(
+        im_LAB_resize2SEM[:,:], 
+        im_SEM[MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM,MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM], 
+        max_shift=0.15, 
+        decim=1, 
+        use_affine_transform=False)
+im_SEM3 = 0 * np.dstack(np.pad(im_SEM, MAX_SHIFT_LAB2SEM, mode='constant') for ch in range(3))[:,:,:]
+pnip.paste_overlay(im_SEM3, im_SEM, shift, np.array([1,1,1])) # , normalize=np.max(newimg_crop)
 
-    #im_resc = np.dstack([scipy.ndimage.zoom(EDX_coloring[:,:,ch], [im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) for ch in range(3)]) #todo use pnip
-    #imageio.imsave('edx_raw_remap_resc.png', im_resc)
+imageio.imsave('edx_im_SEM3.png', im_SEM3)
+
+#im_resc = np.dstack([scipy.ndimage.zoom(EDX_coloring[:,:,ch], [im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) for ch in range(3)]) #todo use pnip
+#imageio.imsave('edx_raw_remap_resc.png', im_resc)
 
 
-    EDX_zoomed = np.dstack([scipy.ndimage.zoom(FG_DESATURATE+channel, [im_SEM.shape[i]/channel.shape[i] for i in range(2)], order=1) for channel in EDX_coloring])
-    print("DEBUG: EDX_zoomed = ", EDX_zoomed.shape)
-    EDX_padded = np.dstack([np.pad(channel, MAX_SHIFT_LAB2SEM, mode='constant') for channel in EDX_zoomed])
-    print("DEBUG: EDX_padded = ", EDX_padded.shape)
+EDX_zoomed = np.dstack([scipy.ndimage.zoom(FG_DESATURATE+channel, [im_SEM.shape[i]/channel.shape[i] for i in range(2)], order=1) for channel in EDX_coloring])
+print("DEBUG: EDX_zoomed = ", EDX_zoomed.shape)
+EDX_padded = np.dstack([np.pad(channel, MAX_SHIFT_LAB2SEM, mode='constant') for channel in EDX_zoomed])
+print("DEBUG: EDX_padded = ", EDX_padded.shape)
 
-    composite = im_SEM3**BG_GAMMA_CURVE*EDX_padded
-    imageio.imsave('edx_target2021.png', composite)
+composite = im_SEM3**BG_GAMMA_CURVE*EDX_padded
+imageio.imsave('edx_target2021.png', composite)
 
-    ## TODO bar test
-    im_SEM_header = annotate_image.analyze_header_XL30(im_SEM_name)
-    composite_annot = annotate_image.add_databar_XL30(composite, sys.argv[1], im_SEM_header, 
-                appendix_lines= [[]],
-                appendix_bars = [[{'style':'bar','xwidth':MAX_SHIFT_LAB2SEM, 'xpitch':60, 'color':0.6}, {'style':'bar','xwidth':30, 'xpitch':60, 'color':[.2,.5,.9]}]] # TODO
-                )
-    imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'target_annot2021.png'), composite_annot)
+## TODO bar test
+im_SEM_header = annotate_image.analyze_header_XL30(im_SEM_name)
+composite_annot = annotate_image.add_databar_XL30(composite, sys.argv[1], im_SEM_header, 
+            appendix_lines= [[]],
+            appendix_bars = [[{'style':'bar','xwidth':MAX_SHIFT_LAB2SEM, 'xpitch':60, 'color':0.6}, {'style':'bar','xwidth':30, 'xpitch':60, 'color':[.2,.5,.9]}]] # TODO
+            )
+imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'target_annot2021.png'), composite_annot)
 
 
 #Note this scipt replaces my original approach:

@@ -13,7 +13,7 @@ retouch_databar         = True      ## Full-white, thin-printed databar can be e
 consecutive_alignment   = True      ## if disabled, images are aligned always to the first one
 trmatrix_factor         = 1.0       ## tuning parameter, theoretically this should be 1.0; 
 prealign_smooth         =  .5       ## for noisy images, higher than 1 can be better 
-force_downsample        = True      ## for images that are blurry and/or noisy so that halving resolution does not reduce information
+force_downsample        = False     ## for images that are blurry and/or noisy so that halving resolution does not reduce information
 
 # FILE HANDLING
 extra_img_ident         = 'S'       ## each image containing this in its name is treated as extra  ## TODO identify extra by analyzing headers!
