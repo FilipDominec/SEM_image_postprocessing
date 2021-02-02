@@ -17,6 +17,9 @@ Additional features
     * Since electron-microscope images can contain a databar, the bottom portion of the images is ignored during alignment
 
 TODOs: 
+    * fix test5 in fzu - one SEM + one CL fails to extract param that differs
+    * fix test6 in fzu - fails to detect params (flAccV etc.)  in edited images, skip this function!
+    * join the export with annotate.py
     * don't forget to anisotropically scale at the load time
     * (too aggressive clipping, or clipping channels too early?) colors are still not as crisp as they used to be 
     * is there some colour mismatch between affine-tr and normal operation?
