@@ -99,7 +99,6 @@ for image_name in image_names:
     newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 1.0))
     image_header = annotate_image.analyze_header_XL30(image_name)
     if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'}
-    print('image_header len', len(image_header))
 
     if getattr(config, 'force_downsample', 1.0) or \
             ((newimg.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
@@ -148,7 +147,8 @@ for image_name in image_names:
 ## Generate 5th line in the databar: color coding explanation
 param_key, param_values = annotate_image.extract_dictkey_that_differs([co['header'] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
 print(param_key, param_values)
-if not param_values: 
+print(getattr(config, 'force_label_by_filename', False), config)
+if not param_values or getattr(config, 'force_label_by_filename', False):
     param_key, param_values = config.param_in_filename, annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
 assert param_values, 'aligned images, but could not extract a scanned parameter from their header nor names'
 
