@@ -97,7 +97,7 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True)
         This approach is fast, but asserts the images are shifted only.
         """
 
-        REL_SMOOTHING = .0025         ## smoothing of the correlation map (not the output), relative to image width
+        REL_SMOOTHING = .005         ## smoothing of the correlation map (not the output), relative to image width
         #rel_smoothing = False      ## no smoothing of the correlation map
         plot_correlation  = False    ## diagnostics
 
@@ -108,11 +108,12 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True)
         raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
         vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)) # centre image
 
-        #import matplotlib.pyplot as plt ## Optional debugging
-        #fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
-        #def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
-        #plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2, lc.shape[0]-vshift_rel*2, 'w')
-        #fig.savefig('correlation.png', bbox_inches='tight') ## needs basename path fixing     +image_name.replace('TIF','PNG')
+        import matplotlib.pyplot as plt ## Optional debugging
+        import time
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
+        def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
+        plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2, lc.shape[0]-vshift_rel*2, 'w')
+        fig.savefig(f'correlation{time.time()}.png', bbox_inches='tight') ## needs basename path fixing     +image_name.replace('TIF','PNG')
 
         return np.array([vshift_rel, hshift_rel])*decim, np.eye(2) # shift vector (plus identity affine transform matrix)
 

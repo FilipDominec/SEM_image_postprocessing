@@ -17,6 +17,7 @@ Additional features
     * Since electron-microscope images can contain a databar, the bottom portion of the images is ignored during alignment
 
 TODOs: 
+    * sort channels by parametric value, not by file list order
     * fix test5 in fzu - one SEM + one CL fails to extract param that differs
     * fix test6 in fzu - fails to detect params (flAccV etc.)  in edited images, skip this function!
     * join the export with annotate.py
@@ -109,6 +110,7 @@ for image_name in image_names:
     max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
     newimg_crop = gaussian_filter(newimg, sigma=config.decim*config.prealign_smooth)[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
+    imageio.imsave(f'newimg_crop{np.sum(newimg_crop)}.png', im=newimg_crop) ## DEBUG
 
     if 'refimg' in locals() and not config.disable_transform: ## the first image will be simply put to centre (nothing to align against)
         shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(
