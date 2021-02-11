@@ -3,8 +3,9 @@
 # SETTINGS FOR CORRELATION OF CATHODOLUMINESCENCE IMAGES
 disable_transform       = False     ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
 use_affine_transform    = False     ## enables scaling, tilting and rotating the images; otherwise they are just shifted
-rel_max_shift           =  .10      ## relative border cropped, limits the maximum shift when fitting (higher number results in slower computation)
-decim                   = 5         ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
+detect_edges            = False     ## if enabled, Laplace operator is applied before image matching
+rel_max_shift           =  .15      ## relative border cropped, limits the maximum shift when fitting (higher number results in slower computation)
+decim                   = 2         ## decimation of images prior to correlation (value of 2-5 speeds up processing, but does not affect the results much)
 
 # FINE TUNING FOR CORRELATION
 #databar_pct            = 0.12      ## relative height of databar at the images' bottom - these must be ignored when searching for correlation
@@ -12,7 +13,7 @@ databar_pct             = 0.01      ##     (set near zero when no databar presen
 retouch_databar         = True      ## Full-white, thin-printed databar can be easily identified and retouched
 consecutive_alignment   = True      ## if disabled, images are aligned always to the first one
 trmatrix_factor         = 1.0       ## tuning parameter, theoretically this should be 1.0; 
-prealign_smooth         =  .5       ## for noisy images, higher than 1 can be better 
+rel_smoothing           = 2e-3      ## for noisy images, increasing to 0.01 (i.e. 1% of image width) may be useful
 force_downsample        = False     ## for images that are blurry and/or noisy so that halving resolution does not reduce information
 
 # FILE HANDLING

@@ -17,7 +17,7 @@ TODO: check if there is no reasonable alternative, then put all functions from t
 import imageio, pathlib
 import numpy as np
 import scipy.signal, scipy.ndimage
-from scipy.ndimage.filters import laplace
+from scipy.ndimage.filters import laplace, gaussian_filter
 from scipy.signal import correlate2d
 from scipy.ndimage import affine_transform, zoom
 from scipy.optimize import differential_evolution
@@ -68,9 +68,9 @@ def auto_contrast_SEM(image, ignore_bottom_part=0.2):
 def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
     if weight:
         if len(np.shape(im)) == 3:      # handle channels of colour image separately
-            unsharp = np.dstack([scipy.ndimage.filters.gaussian_filter(channel, sigma=radius) for channel in im])
+            unsharp = np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
         else:
-            unsharp = scipy.ndimage.filters.gaussian_filter(im, sigma=radius)
+            unsharp = gaussian_filter(im, sigma=radius)
         im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
         #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
     return im
@@ -89,27 +89,34 @@ def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function ar
     if np.all(np.isclose(trmatrix, np.eye(2))): return im
     return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
 
-def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True):
+def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True, detect_edges=False, rel_smoothing=2.5E-3):
     def find_shift(im1, im2, max_shift, decim):
         """
         shifts im2 against im1 so that a best correlation is found, returns a tuple of the pixel shift
 
-        This approach is fast, but asserts the images are shifted only.
+        This approach is fast, but asserts the images are not deformed (shifted only).
         """
 
-        REL_SMOOTHING = .005         ## smoothing of the correlation map (not the output), relative to image width
+        #rel_smoothing = .0025         ## smoothing of the correlation map (not the output), relative to image width
         #rel_smoothing = False      ## no smoothing of the correlation map
-        plot_correlation  = False    ## diagnostics
+        #plot_correlation  = False    ## diagnostics
 
-        corr = correlate2d(laplace(im1), im2, mode='valid')     ## search for best overlap of edges (~ Laplacian of the image correlation)
+        if detect_edges: ## search for best overlap of edges (~ Laplacian of the image correlation)
+            print("LAPLACE")
+            corr = correlate2d(laplace(im1), im2, mode='valid')     
+            lc = np.abs(gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1])) 
+        else: ## search for best overlap of brightness
+            print("DIRECT")
+            corr = correlate2d(im1-np.mean(im1), im2-np.mean(im2), mode='valid')     
+            corr = gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1])
+            print("DEBUG: rel_smoothing = ", rel_smoothing)
+            lc = np.abs(corr) 
         #cr=1  # post-laplace cropping, there were some edge artifacts
-        lc = np.abs(scipy.ndimage.filters.gaussian_filter(corr, sigma=REL_SMOOTHING*im1.shape[1])) 
 
         raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
         vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)) # centre image
 
-        import matplotlib.pyplot as plt ## Optional debugging
-        import time
+        import time, matplotlib.pyplot as plt ## Optional debugging
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
         def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
         plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2, lc.shape[0]-vshift_rel*2, 'w')
@@ -132,8 +139,15 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True)
         crop_bottom = int(im1.shape[0]/2-im2.shape[0]/2+.5)
         crop_left   = int(im1.shape[1]/2-im2.shape[1]/2)
         crop_right  = int(im1.shape[1]/2-im2.shape[1]/2+.5)
+        if detect_edges:
+            test_im = laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right]) ## TODO apply gaussian_filter if smoothing
+        else:
+            test_im = im1[crop_up:-crop_bottom,crop_left:-crop_right]
+            test_im -= np.mean(test_im)
+        im2_subtr = im2 - np.mean(im2)
+
         def fitf(p): 
-            return -np.abs(np.sum(laplace(im1[crop_up:-crop_bottom,crop_left:-crop_right])*my_affine_tr(im2, p[2:].reshape(2,2), shiftvec=p[:2])))
+            return -np.abs(np.sum(test_im*my_affine_tr(im2_subtr, p[2:].reshape(2,2), shiftvec=p[:2])))
 
         bounds = [(-max_shift,max_shift), (-max_shift,max_shift), (1-max_tr, 1+max_tr), (0-max_tr, 0+max_tr),(0-max_tr, 0+max_tr),(1-max_tr, 1+max_tr)]
         result = differential_evolution(fitf, bounds=bounds)
@@ -210,7 +224,6 @@ def text_initialize(typecase_rel_path='typecase.png'):
     return typecase_dict, ch, cw
 
 def put_text(im, text, x, y, cw, ch, typecase_dict, color=1):
-    print("DEBUG: text = ", text)
     for n,c in enumerate(text): 
         if x+cw+cw*n>im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
         else: 

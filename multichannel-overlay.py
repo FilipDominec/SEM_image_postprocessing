@@ -82,7 +82,6 @@ def is_extra(imname):
 #for a in dir(config): print(a, getattr(config,a), type(getattr(config,a)))
 
 image_names = sys.argv[1:]  or  getattr(config, 'input_files', '').split()
-#print("DEBUG: image_names = ", image_names)
 
 
 #colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
@@ -109,12 +108,16 @@ for image_name in image_names:
     color_tint = pnip.white if is_extra(image_name) else colors.pop()
     max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
-    newimg_crop = gaussian_filter(newimg, sigma=config.decim*config.prealign_smooth)[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
-    imageio.imsave(f'newimg_crop{np.sum(newimg_crop)}.png', im=newimg_crop) ## DEBUG
+    newimg_crop = newimg[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
+    #imageio.imsave(f'newimg_crop{np.sum(newimg_crop)}.png', im=newimg_crop) ## DEBUG
 
     if 'refimg' in locals() and not config.disable_transform: ## the first image will be simply put to centre (nothing to align against)
         shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(
-                refimg_crop, newimg_crop, max_shift=max_shift, decim=config.decim, use_affine_transform=config.use_affine_transform)
+                refimg_crop, newimg_crop, max_shift=max_shift, decim=config.decim, 
+                use_affine_transform=config.use_affine_transform, 
+                detect_edges=config.detect_edges,
+                rel_smoothing=config.rel_smoothing)
+        print("DEBUG: detect_edges = ", config.detect_edges)
         shiftvec_sum += shiftvec_new 
         trmatrix_sum += (trmatrix_new - np.eye(2))*config.trmatrix_factor
         print('... is shifted by {:}px against its reference image and by {:}px against the first one'.format(
