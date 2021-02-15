@@ -11,12 +11,13 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
             depth =  1 for monochrome image, 3 for R-G-B colour images
 
 TODO: check if there is no reasonable alternative, then put all functions from this module into a class
+TODO: user-friendly consistency: no in-place changes of images 
 
 """
 
 import imageio, pathlib
 import numpy as np
-import scipy.signal, scipy.ndimage
+#import scipy.signal, scipy.ndimage
 from scipy.ndimage.filters import laplace, gaussian_filter
 from scipy.signal import correlate2d
 from scipy.ndimage import affine_transform, zoom
@@ -35,8 +36,6 @@ def load_Siemens_BMP(fname):
     assert bpp == 8, f'monochrome/LUT image assumed (8 bit per pixel); {fname} has {bpp}bpp'
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
-
-white = [1,1,1]
 
 def safe_imload(imname, retouch=False):
     """
@@ -102,14 +101,11 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True,
         #plot_correlation  = False    ## diagnostics
 
         if detect_edges: ## search for best overlap of edges (~ Laplacian of the image correlation)
-            print("LAPLACE")
             corr = correlate2d(laplace(im1), im2, mode='valid')     
             lc = np.abs(gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1])) 
         else: ## search for best overlap of brightness
-            print("DIRECT")
             corr = correlate2d(im1-np.mean(im1), im2-np.mean(im2), mode='valid')     
             corr = gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1])
-            print("DEBUG: rel_smoothing = ", rel_smoothing)
             lc = np.abs(corr) 
         #cr=1  # post-laplace cropping, there were some edge artifacts
 
@@ -161,7 +157,7 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0):
     Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
 
     """
-    return scipy.ndimage.zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
+    return zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
 
 def downscaletwice(im):
     """
@@ -186,6 +182,7 @@ def auto_crop_black_borders(im, return_indices_only=False):
 
 
 ## Text/image/drawing overlay routines
+white = [1,1,1]
 
 def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_exponent=1.):
     """ 
