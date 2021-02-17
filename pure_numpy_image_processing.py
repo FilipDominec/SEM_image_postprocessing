@@ -12,15 +12,15 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
 
 TODO: check if there is no reasonable alternative, then put all functions from this module into a class
 TODO: user-friendly consistency: no in-place changes of images 
+TODO: make this compatible with https://scipy-lectures.org/advanced/image_processing/ and propose partial merge
 
 """
 
 import imageio, pathlib
 import numpy as np
-#import scipy.signal, scipy.ndimage
 from scipy.ndimage.filters import laplace, gaussian_filter
-from scipy.signal import correlate2d
 from scipy.ndimage import affine_transform, zoom
+from scipy.signal import correlate2d
 from scipy.optimize import differential_evolution
 
 # Load the input images
@@ -188,8 +188,10 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
     """ 
     Image addition (keeps background image) with specified color_tint
 
-    Modifies bgimage in place
+    FIXME Modifies bgimage in place
     """
+    print("bgimage.shape, fgimage.shape", bgimage.shape, fgimage.shape)
+    #fgimage = np.dstack([fgimage]*3) # XXX
     for channel in range(3):
         vs, hs = shiftvec.astype(int)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
@@ -197,9 +199,12 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
         #if channel == 0:
             #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
             #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
-        bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
+        aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
-                channel] += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
+                channel]
+        print("DEBUG: aa = ", aa.shape)
+        print("DEBUG: fgimage = ", fgimage.shape)
+        aa += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
                 #fgimage**channel_exponent*float(color[channel]) 
 
 

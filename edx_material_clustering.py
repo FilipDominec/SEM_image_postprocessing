@@ -12,6 +12,11 @@ License: BSD 3 clause
 
 """
 
+#TODO: try to get along without 'sklearn' dep, using
+        #https://docs.scipy.org/doc/scipy/reference/cluster.html#module-scipy.cluster
+        #np.random
+
+
 # STATIC SETTINGS
 SMOOTHING_PX = .7       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
@@ -22,7 +27,7 @@ DENORM_EXP   =  .5      # partial de-normalization: Siemens EDX saves images as
                         # DENORM_EXP = 1 for full proportionality, but  
                         # DENORM_EXP = 0.5 seems to give better results.
 
-BG_GAMMA_CURVE = 0.5    # use 1 for linear colour scaling for SEM underlying layer;
+BG_GAMMA_CURVE = 0.8    # use 1 for linear colour scaling for SEM underlying layer;
                         # use cca 0.5 to enhance color hue visibility in the shadows
 
 FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite image; 
@@ -31,7 +36,7 @@ FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite i
 SEM2EDX_ZOOM_CORR = 1.04    ## , the areas scanned by SEM and consequent EDX mapping are not the same
 MAX_SHIFT_LAB2SEM = 30      ## 
 
-print(__doc__)
+#print(__doc__)
 import numpy as np
 from sklearn.cluster import KMeans
 #from sklearn.metrics import pairwise_distances_argmin
@@ -105,7 +110,7 @@ labels = kmeans.predict(pixel_array)
 
 ## == Output to a numpy array == 
 palette = np.array([pnip.hsv_to_rgb(i,1,1) for i in np.linspace(0,1-1/n_colors,n_colors)])
-print(palette)
+#print(palette)
 labels_remapped = pnip.rgb_palette(n_colors=n_colors)[labels]
 im_reshaped = labels_remapped.reshape([w,h,3]) # / (np.max(labels)+1)
 #imageio.imsave('edx_raw.png', im_reshaped)
@@ -133,9 +138,7 @@ assert 'lab_name' in locals(), '"LAB" (i.e. simultaneous SEM image taken along w
 import scipy.ndimage
 
 im_SEM = pnip.safe_imload(im_SEM_name) 
-print("DEBUG: im_SEM_name = ", im_SEM_name)
 im_LAB = pnip.safe_imload(lab_name)
-print("DEBUG: lab_name = ", lab_name)
 im_LAB_resize2SEM = scipy.ndimage.zoom(im_LAB, [SEM2EDX_ZOOM_CORR * im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) #todo use pnip
 imageio.imsave('edx_im_LAB_resize2SEM.png', im_LAB_resize2SEM)
 
@@ -151,14 +154,8 @@ pnip.paste_overlay(im_SEM3, im_SEM, shift, np.array([1,1,1])) # , normalize=np.m
 
 imageio.imsave('edx_im_SEM3.png', im_SEM3)
 
-#im_resc = np.dstack([scipy.ndimage.zoom(EDX_coloring[:,:,ch], [im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) for ch in range(3)]) #todo use pnip
-#imageio.imsave('edx_raw_remap_resc.png', im_resc)
-
-
-EDX_zoomed = np.dstack([scipy.ndimage.zoom(FG_DESATURATE+channel, [im_SEM.shape[i]/channel.shape[i] for i in range(2)], order=1) for channel in EDX_coloring])
-print("DEBUG: EDX_zoomed = ", EDX_zoomed.shape)
-EDX_padded = np.dstack([np.pad(channel, MAX_SHIFT_LAB2SEM, mode='constant') for channel in EDX_zoomed])
-print("DEBUG: EDX_padded = ", EDX_padded.shape)
+EDX_zoomed = scipy.ndimage.zoom(FG_DESATURATE+EDX_coloring, [im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)] + [1], order=1)
+EDX_padded = np.dstack([np.pad(EDX_zoomed[:,:,ch], MAX_SHIFT_LAB2SEM, mode='constant') for ch in range(3)])
 
 composite = im_SEM3**BG_GAMMA_CURVE*EDX_padded
 imageio.imsave('edx_target2021.png', composite)
