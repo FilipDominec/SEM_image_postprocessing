@@ -174,6 +174,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     ## Initialize raster graphics to be put in the image
     logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
     typecase_dict, ch, cw = pnip.text_initialize()
+    print(ch, cw)
 
     if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
         im = pnip.auto_contrast_SEM(im)
@@ -223,17 +224,10 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
             im = pnip.put_text(im, content, x=xcaret, y=dbartop+ch*(4+nline), cw=cw, ch=ch, typecase_dict=typecase_dict, color=color)
             xcaret += cw*len(content)
     for nline, barline in enumerate(appendix_bars):
-        xcaret = xpos
+        xcaret = xpos+2
         for bar in barline:
-            # TODO test - draw a bar --> pnip.
-            def put_bar(im, x, y, h, xw, color=None):
-                if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
-                im[y+2:y+h-2, x-1:x+xw] = color
-                return im
             if isinstance(bar, dict) and bar.get('style') == 'bar':
-                print('BL',barline)
-                im = put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/200)*nline, h=int(ch/2)-2, xw=bar.get('xwidth'), color=bar.get('color',1))
-                #im = put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/2)*nline, h=int(ch/2)-1, xw=content.get('xwidth'))
+                im = pnip.put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/2)*nline, h=int(ch/2-1), xw=bar.get('xwidth'), color=bar.get('color',1))
                 xcaret += bar.get('xpitch')
 
     return im

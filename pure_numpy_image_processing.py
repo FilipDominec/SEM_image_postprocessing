@@ -194,11 +194,15 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
     #fgimage = np.dstack([fgimage]*3) # XXX
     for channel in range(3):
         vs, hs = shiftvec.astype(int)
+        print(vs, hs)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
+        print("DEBUG: vc = ", vc)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
+        print("DEBUG: hc = ", hc)
         #if channel == 0:
             #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
             #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
+        print('idx ..........', [vc-vs, vc+fgimage.shape[0]-vs, hc-hs,hc+fgimage.shape[1]-hs, channel])
         aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel]
@@ -248,9 +252,10 @@ def put_scale(im, x, y, h, xw, color=None):
     im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = color
     return im
 
-def put_hbar(im, x, y, h, xw, color=None):
-    pass
-    # TODO
+def put_bar(im, x, y, h, xw, color=None):
+    if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
+    im[y+2:y+h-2, x-1:x+xw] = color
+    return im
 
 
 
