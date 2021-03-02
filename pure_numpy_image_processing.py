@@ -9,6 +9,7 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
             width =  image width
             height = image height
             depth =  1 for monochrome image, 3 for R-G-B colour images
+FIXME: sometimes monochrome images are returned as just 2-D arrays
 
 TODO: check if there is no reasonable alternative, then put all functions from this module into a class
 TODO: user-friendly consistency: no in-place changes of images 
@@ -20,7 +21,7 @@ import imageio, pathlib
 import numpy as np
 from scipy.ndimage.filters import laplace, gaussian_filter
 from scipy.ndimage import affine_transform, zoom
-from scipy.signal import correlate2d
+from scipy.signal import correlate2d, convolve2d
 from scipy.optimize import differential_evolution
 
 # Load the input images
@@ -164,8 +165,7 @@ def downscaletwice(im):
     A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
     Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
     """
-    return scipy.ndimage.zoom(
-            scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), 
+    return zoom(convolve2d(im,[[1,1],[1,1]],mode='valid'), 
             [0.5, 0.5] + [1]*(len(im.shape)-2), 
             order=1) 
 

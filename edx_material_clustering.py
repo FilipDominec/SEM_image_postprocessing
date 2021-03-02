@@ -36,7 +36,7 @@ FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite i
                         # use e.g. 3 for better visibility of the underlying SEM image
 
 SEM2EDX_ZOOM_CORR = 1.04    ## , the areas scanned by SEM and consequent EDX mapping are not the same
-MAX_SHIFT_LAB2SEM = 160      ## 
+MAX_SHIFT_LAB2SEM = 60      ## 
 
 #print(__doc__)
 import numpy as np
@@ -141,6 +141,7 @@ EDX_coloring = labels_remapped.reshape([w,h,3])
 
 
 im_SEM = pnip.safe_imload(im_SEM_name) 
+im_SEM -= np.min(im_SEM) # TODO
 im_LAB = pnip.safe_imload(lab_name)
 im_LAB_resize2SEM = scipy.ndimage.zoom(im_LAB, [SEM2EDX_ZOOM_CORR * im_SEM.shape[i]/EDX_coloring.shape[i] for i in range(2)], order=1) #todo use pnip
 #imageio.imsave('edx_im_LAB_resize2SEM.png', im_LAB_resize2SEM)
@@ -162,6 +163,7 @@ EDX_zoomed = scipy.ndimage.zoom(FG_DESATURATE+EDX_coloring, [im_SEM.shape[i]/EDX
 EDX_padded = np.dstack([np.pad(EDX_zoomed[:,:,ch], MAX_SHIFT_LAB2SEM, mode='constant') for ch in range(3)])
 
 composite = im_SEM3**BG_GAMMA_CURVE*EDX_padded
+composite = pnip.auto_crop_black_borders(composite, return_indices_only=False)
 #imageio.imsave('edx_target2021.png', composite)
 
 ## TODO bar test
