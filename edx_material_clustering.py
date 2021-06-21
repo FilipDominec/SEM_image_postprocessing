@@ -15,6 +15,7 @@ License: BSD 3 clause
 #TODO: try to get along without 'sklearn' dep, using
         #https://docs.scipy.org/doc/scipy/reference/cluster.html#module-scipy.cluster
         #np.random
+# TODO : fix the scalebar, it should not depend on the black borders width !
 
 
 # STATIC SETTINGS
