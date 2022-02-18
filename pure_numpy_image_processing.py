@@ -9,17 +9,19 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
             width =  image width
             height = image height
             depth =  1 for monochrome image, 3 for R-G-B colour images
+FIXME: sometimes monochrome images are returned as just 2-D arrays
 
 TODO: check if there is no reasonable alternative, then put all functions from this module into a class
+TODO: user-friendly consistency: no in-place changes of images 
+TODO: make this compatible with https://scipy-lectures.org/advanced/image_processing/ and propose partial merge
 
 """
 
 import imageio, pathlib
 import numpy as np
-import scipy.signal, scipy.ndimage
 from scipy.ndimage.filters import laplace, gaussian_filter
-from scipy.signal import correlate2d
 from scipy.ndimage import affine_transform, zoom
+from scipy.signal import correlate2d, convolve2d
 from scipy.optimize import differential_evolution
 
 # Load the input images
@@ -35,8 +37,6 @@ def load_Siemens_BMP(fname):
     assert bpp == 8, f'monochrome/LUT image assumed (8 bit per pixel); {fname} has {bpp}bpp'
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
-
-white = [1,1,1]
 
 def safe_imload(imname, retouch=False):
     """
@@ -158,15 +158,14 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0):
     Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
 
     """
-    return scipy.ndimage.zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
+    return zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
 
 def downscaletwice(im):
     """
     A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
     Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
     """
-    return scipy.ndimage.zoom(
-            scipy.signal.convolve2d(im,[[1,1],[1,1]],mode='valid'), 
+    return zoom(convolve2d(im,[[1,1],[1,1]],mode='valid'), 
             [0.5, 0.5] + [1]*(len(im.shape)-2), 
             order=1) 
 
@@ -183,23 +182,33 @@ def auto_crop_black_borders(im, return_indices_only=False):
 
 
 ## Text/image/drawing overlay routines
+white = [1,1,1]
 
 def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_exponent=1.):
     """ 
     Image addition (keeps background image) with specified color_tint
 
-    Modifies bgimage in place
+    FIXME Modifies bgimage in place
     """
+    print("bgimage.shape, fgimage.shape", bgimage.shape, fgimage.shape)
+    #fgimage = np.dstack([fgimage]*3) # XXX
     for channel in range(3):
         vs, hs = shiftvec.astype(int)
+        print(vs, hs)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
+        print("DEBUG: vc = ", vc)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
+        print("DEBUG: hc = ", hc)
         #if channel == 0:
             #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
             #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
-        bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
+        print('idx ..........', [vc-vs, vc+fgimage.shape[0]-vs, hc-hs,hc+fgimage.shape[1]-hs, channel])
+        aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
-                channel] += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
+                channel]
+        print("DEBUG: aa = ", aa.shape)
+        print("DEBUG: fgimage = ", fgimage.shape)
+        aa += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
                 #fgimage**channel_exponent*float(color[channel]) 
 
 
@@ -243,9 +252,10 @@ def put_scale(im, x, y, h, xw, color=None):
     im[y+int(h/2)-1:y+int(h/2)+1,   x-1:x+1+xw] = color
     return im
 
-def put_hbar(im, x, y, h, xw, color=None):
-    pass
-    # TODO
+def put_bar(im, x, y, h, xw, color=None):
+    if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
+    im[y+2:y+h-2, x-1:x+xw] = color
+    return im
 
 
 

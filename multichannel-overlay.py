@@ -114,7 +114,6 @@ for image_name in image_names:
     max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
     newimg_crop = newimg[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
-    #imageio.imsave(f'newimg_crop{np.sum(newimg_crop)}.png', im=newimg_crop) ## DEBUG
 
     if 'refimg' in locals() and not config.disable_transform: ## the first image will be simply put to centre (nothing to align against)
         shiftvec_new, trmatrix_new = pnip.find_affine_and_shift(
