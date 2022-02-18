@@ -19,7 +19,7 @@ License: BSD 3 clause
 
 
 # STATIC SETTINGS
-n_colors = 7
+n_colors = 4
 
 SMOOTHING_PX = .5       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
@@ -182,7 +182,7 @@ composite_annot = annotate_image.add_databar_XL30(composite, sys.argv[1], im_SEM
             appendix_lines= [appendix_line],
             appendix_bars = appendix_bars # TODO
             )
-imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'edx_composite.png'), composite_annot)
+imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / f'edx_composite_{n_colors}colors.png'), composite_annot)
 
 
 #Note this scipt replaces my original approach:

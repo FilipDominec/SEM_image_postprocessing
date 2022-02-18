@@ -266,7 +266,7 @@ def annotate_individually(imnames):
             
 if __name__ == '__main__':
     imnames = sys.argv[1:]
-    if imnames: annotate_individually()
+    if imnames: annotate_individually(imnames)
     else: print("Please specify one or more TIF files to be processed individually")
 
 

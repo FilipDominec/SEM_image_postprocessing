@@ -88,7 +88,7 @@ image_names = sys.argv[1:]  or  getattr(config, 'input_files', '').split()
 #colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
 #colors = pnip.rgb_palette(len([s for s in image_names if not is_extra(s)])
 n_color_channels = len([s for s in image_names if not is_extra(s)])
-gn = getattr(config, 'green_channel_factor', 0.8)
+gn = getattr(config, 'green_channel_factor', 0.8) if n_color_channels>2 else 0.8
 colors = [pnip.hsv_to_rgb(h=h, green_norm=gn) for  h in 
         np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
 colors2 = colors[::-1]

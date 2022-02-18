@@ -26,7 +26,7 @@ extra_img_label         = '+'       ## each image name preceded by this is treat
 param_in_filename       = u'λ(nm)'  ## if filenames differ in some number, this is the physical quantity that differs
 
 # IMAGE POST-PROCESSING SETTINGS:
-green_channel_factor    = 0.4       ## Use 0.8 for perceptively flat brightness; use e.g. 0.4 for narrow-band spectral emission
+green_channel_factor    = 0.6       ## Use 0.8 for perceptively flat brightness; use e.g. 0.4 for narrow-band spectral emission
 mean_brightness_norm    = 0.5		## If set to 1, image is normalized to mean brightness. Can be fractional.
 max_brightness_norm     = 0.5		## If set to 1, image is normalized to maximum. Can be fractional, can combine with mean_brightness_norm.
 saturation_enhance      =  .15      ## How much is the monochromated image subtracted from the output image
