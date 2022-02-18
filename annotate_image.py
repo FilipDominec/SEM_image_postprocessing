@@ -264,6 +264,7 @@ def annotate_individually(imnames):
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
             if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 
                 imageio.imsave(str(outname), im)
+                # try metadata with PIL? https://stackoverflow.com/questions/58399070/how-do-i-save-custom-information-to-a-png-image-file-in-python
                 print(f"OK: Processed {imname} and exported to {outname}.")
             else: print(f"Warning: file {imname} exists, and overwriting was not allowed. Not saving.")
         except Exception as e: 
