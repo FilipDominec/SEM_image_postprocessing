@@ -259,8 +259,7 @@ def annotate_individually(imnames):
 
         im = add_databar_XL30(im, imname, ih)
 
-        try:
-            ## Export image
+        try: ## Export image
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
             if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 
                 imageio.imsave(str(outname), im)
@@ -272,6 +271,8 @@ def annotate_individually(imnames):
             print('Error: image {:} skipped: \n\n'.format(outname), e,traceback.print_exc() ), traceback.print_exc()
             
 if __name__ == '__main__':
-    annotate_individually(imnames = sys.argv[1:])
+    imnames = sys.argv[1:]
+    if imnames: annotate_individually()
+    else: print("Please specify one or more TIF files to be processed individually")
 
 

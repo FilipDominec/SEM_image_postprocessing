@@ -45,7 +45,7 @@ import pure_numpy_image_processing as pnip
 import annotate_image
 
 
-
+# TODO anisotropy
 
 # User input
 #n_colors = int(sys.argv[1])
