@@ -19,9 +19,9 @@ License: BSD 3 clause
 
 
 # STATIC SETTINGS
-n_colors = 4
+n_colors = 6
 
-SMOOTHING_PX = .5       # higher value -> less jagged material regions, but 
+SMOOTHING_PX = 2.       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
 
 DENORM_EXP   =  .2      # partial de-normalization: Siemens EDX saves images as 
@@ -37,7 +37,11 @@ FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite i
                         # use e.g. 3 for better visibility of the underlying SEM image
 
 SEM2EDX_ZOOM_CORR = 1.04    ## , the areas scanned by SEM and consequent EDX mapping are not the same
-MAX_SHIFT_LAB2SEM = 60      ## 
+MAX_SHIFT_LAB2SEM = 45      ## 
+
+FORCE_SHIFT = None
+#FORCE_SHIFT = [0,0] # positive values = SE underlayer moves towards top left corner
+#FORCE_SHIFT = [30,40] # positive values = SE underlayer moves towards top left corner
 
 #print(__doc__)
 import numpy as np
@@ -148,13 +152,16 @@ im_LAB_resize2SEM = scipy.ndimage.zoom(im_LAB, [SEM2EDX_ZOOM_CORR * im_SEM.shape
 #imageio.imsave('edx_im_LAB_resize2SEM.png', im_LAB_resize2SEM)
 
 # Find the shift of high quality SEM image against "Lab1" image (i.e. SEM image taken during EDX map)
-shift, _ = pnip.find_affine_and_shift(
-        im_LAB_resize2SEM[:,:], 
-        im_SEM[MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM,MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM], 
-        max_shift=0.05, 
-        decim=1, 
-        detect_edges=True,
-        use_affine_transform=False)
+if FORCE_SHIFT:
+    shift = np.array(FORCE_SHIFT)
+else:
+    shift, _ = pnip.find_affine_and_shift(
+            im_LAB_resize2SEM[:,:], 
+            im_SEM[MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM,MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM], 
+            max_shift=0.05, 
+            decim=1, 
+            detect_edges=True,
+            use_affine_transform=False)
 im_SEM3 = 0 * np.dstack(np.pad(im_SEM, MAX_SHIFT_LAB2SEM, mode='constant') for ch in range(3))[:,:,:]
 pnip.paste_overlay(im_SEM3, im_SEM, shift, np.array([1,1,1])) # , normalize=np.max(newimg_crop)
 
