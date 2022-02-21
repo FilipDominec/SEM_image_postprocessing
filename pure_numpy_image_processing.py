@@ -25,9 +25,9 @@ from scipy.signal import correlate2d, convolve2d
 from scipy.optimize import differential_evolution
 
 # Load the input images
-def load_Siemens_BMP(fname):
+def load_Philips30XL_BMP(fname):
     """ 
-    Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
+    Experimental loading of BMPs from Philips30XL microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
     with open(fname, mode='rb') as file: # first analyze the header
@@ -40,14 +40,14 @@ def load_Siemens_BMP(fname):
 
 def safe_imload(imname, retouch=False):
     """
-    Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Siemens EDX)
+    Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Philips30XL EDX)
 
     Returns:
         single-channel 2D numpy array (width x height) with values between 0.0 and 1.0
 
     """
     try: im = imageio.imread(str(imname)) 
-    except: im = load_Siemens_BMP(imname)
+    except: im = load_Philips30XL_BMP(imname)
     im = im/255 if np.max(im)<256 else im/65535   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
@@ -155,7 +155,7 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True,
 
 def anisotropic_prescale(im, pixel_anisotropy=1.0): 
     """
-    Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
+    Simple correction of images - some microscopes save them with non-square pixels (e.g. our Philips30XL SEM).
 
     """
     return zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)

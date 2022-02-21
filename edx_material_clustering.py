@@ -24,7 +24,7 @@ n_colors = 6
 SMOOTHING_PX = 2.       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
 
-DENORM_EXP   =  .2      # partial de-normalization: Siemens EDX saves images as 
+DENORM_EXP   =  .2      # partial de-normalization: Philips EDX saves images as 
                         # normalized. The more unique levels we count in each 
                         # image, the more EDX signal there was. Select 
                         # DENORM_EXP = 1 for full proportionality, but  
@@ -76,7 +76,7 @@ for imname in imnames:
         lab_name = imname
     else:
         #try: input_layer = imageio.imread(imname)
-        #except: input_layer = load_Siemens_BMP(imname)
+        #except: input_layer = load_Philips30XL_BMP(imname)
         input_layer = pnip.safe_imload(imname)
         element_names.append(imname.rsplit('_')[-1].rsplit('.')[0])
         assert len(input_layer.shape) == 2, 'did not expect RGB images from an EDX channel'
