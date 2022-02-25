@@ -24,39 +24,39 @@ detectors = {'0': 'SE', '2':'Aux', '3':'CL'}
 
 
 def analyze_header_XL30(imname, allow_underscore_alias=True):
-        """ 
-        Analyze the TIFF image header, which is "specific" for Philips/FEI 30XL 
-        microscope control software (running under WinNT from early 2000s)
+    """ 
+    Analyze the TIFF image header, which is "specific" for Philips/FEI XL30 
+    microscope control software (running under WinNT from early 2000s)
 
-        Accepts:
-            imname 
-                path to be analyzed
-            boolean allow_underscore_alias
-                if set to True and image has no compatible header, try loading
-                it from "_filename" in the same directory (the image file was 
-                perhaps edited)
-        
-        Returns a dict of all 194 key/value pairs found in the ascii header,
-        or {} if no header is found.
-        
-        """
-        try:
-            with open(imname, encoding = "ISO-8859-1") as of: 
-                # TODO seek for [DatabarData] first, then count the 194 lines!
-                ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-        except:
-            print('Warning: image {:} does not contain readable SEM metadata'.format(imname))
-            if not allow_underscore_alias: 
-                 print('    skipping it...')
-            else:
-                print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
-                try: 
-                    with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
-                        ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-                        #ih['lDetName'] = '3' ## XXX FIXME: hack for detector override
-                except FileNotFoundError: 
-                    return {} ## empty dict 
-        return ih
+    Accepts:
+        imname 
+            path to be analyzed
+        boolean allow_underscore_alias
+            if set to True and image has no compatible header, try loading
+            it from "_filename" in the same directory (the image file was 
+            perhaps edited)
+    
+    Returns a dict of all 194 key/value pairs found in the ascii header,
+    or {} if no header is found.
+    
+    """
+    try:
+        with open(imname, encoding = "ISO-8859-1") as of: 
+            # TODO seek for [DatabarData] first, then count the 194 lines!
+            ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+    except:
+        print('Warning: image {:} does not contain readable SEM metadata'.format(imname))
+        if not allow_underscore_alias: 
+             print('    skipping it...')
+        else:
+            print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
+            try: 
+                with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
+                    ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+                    #ih['lDetName'] = '3' ## optional hack for detector override
+            except FileNotFoundError: 
+                return {} ## empty dict 
+    return ih
 
 
 
@@ -113,7 +113,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     Input:
         * image (as a 2D numpy array), 
         * its file name, and 
-        * image header from the Siemens XL30 SEM (as a dict)
+        * image header from the Philips XL30 SEM (as a dict)
             * if it is a list/tuple, additional line sums up the difference
             * if there is no difference in the headers, it is extracted from the filenames
         * downsample_size_threshold [px]: smaller image will not be downsampled
@@ -253,11 +253,11 @@ def annotate_individually(imnames):
 
         im = add_databar_XL30(im, imname, ih)
 
-        try:
-            ## Export image
+        try: ## Export image
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
             if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 
                 imageio.imsave(str(outname), im)
+                # try metadata with PIL? https://stackoverflow.com/questions/58399070/how-do-i-save-custom-information-to-a-png-image-file-in-python
                 print(f"OK: Processed {imname} and exported to {outname}.")
             else: print(f"Warning: file {imname} exists, and overwriting was not allowed. Not saving.")
         except Exception as e: 
@@ -265,6 +265,8 @@ def annotate_individually(imnames):
             print('Error: image {:} skipped: \n\n'.format(outname), e,traceback.print_exc() ), traceback.print_exc()
             
 if __name__ == '__main__':
-    annotate_individually(imnames = sys.argv[1:])
+    imnames = sys.argv[1:]
+    if imnames: annotate_individually(imnames)
+    else: print("Please specify one or more TIF files to be processed individually")
 
 

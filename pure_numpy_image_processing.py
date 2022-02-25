@@ -25,9 +25,9 @@ from scipy.signal import correlate2d, convolve2d
 from scipy.optimize import differential_evolution
 
 # Load the input images
-def load_Siemens_BMP(fname):
+def load_Philips30XL_BMP(fname):
     """ 
-    Experimental loading of BMPs from Siemens microscopes (they have an atypical format which cannot be loaded by imageio)
+    Experimental loading of BMPs from Philips30XL microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
     with open(fname, mode='rb') as file: # first analyze the header
@@ -40,14 +40,14 @@ def load_Siemens_BMP(fname):
 
 def safe_imload(imname, retouch=False):
     """
-    Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Siemens EDX)
+    Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Philips30XL EDX)
 
     Returns:
         single-channel 2D numpy array (width x height) with values between 0.0 and 1.0
 
     """
     try: im = imageio.imread(str(imname)) 
-    except: im = load_Siemens_BMP(imname)
+    except: im = load_Philips30XL_BMP(imname)
     im = im/255 if np.max(im)<256 else im/65535   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
@@ -113,11 +113,11 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True,
         raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
         vshift_rel, hshift_rel = int((lc.shape[0]/2 - raw_shifts[0] - 0.5)), int((lc.shape[1]/2 - raw_shifts[1] - 0.5)) # centre image
 
-        import time, matplotlib.pyplot as plt ## Optional debugging
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
-        def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
-        plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2, lc.shape[0]-vshift_rel*2, 'w')
-        fig.savefig(f'correlation{time.time()}.png', bbox_inches='tight') ## needs basename path fixing     +image_name.replace('TIF','PNG')
+        #import time, matplotlib.pyplot as plt ## Optional debugging
+        #fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15,15)); im = ax.imshow(lc)  # 4 lines for diagnostics only:
+        #def plot_cross(h,v,c): ax.plot([h/2-5-.5,h/2+5-.5],[v/2+.5,v/2+.5],c=c,lw=.5); ax.plot([h/2-.5,h/2-.5],[v/2-5+.5,v/2+5+.5],c=c,lw=.5)
+        #plot_cross(lc.shape[1], lc.shape[0], 'k'); plot_cross(lc.shape[1]-hshift_rel*2, lc.shape[0]-vshift_rel*2, 'w')
+        #fig.savefig(f'correlation{time.time()}.png', bbox_inches='tight') ## needs basename path fixing     +image_name.replace('TIF','PNG')
 
         return np.array([vshift_rel, hshift_rel])*decim, np.eye(2) # shift vector (plus identity affine transform matrix)
 
@@ -155,7 +155,7 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True,
 
 def anisotropic_prescale(im, pixel_anisotropy=1.0): 
     """
-    Simple correction of images - some microscopes save them with non-square pixels (e.g. our Siemens SEM).
+    Simple correction of images - some microscopes save them with non-square pixels (e.g. our Philips30XL SEM).
 
     """
     return zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
@@ -199,10 +199,10 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
         print("DEBUG: vc = ", vc)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
         print("DEBUG: hc = ", hc)
-        #if channel == 0:
-            #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
-            #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
-        print('idx ..........', [vc-vs, vc+fgimage.shape[0]-vs, hc-hs,hc+fgimage.shape[1]-hs, channel])
+        if channel == 0:
+            print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
+            print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
+        #print('idx ..........', [vc-vs, vc+fgimage.shape[0]-vs, hc-hs,hc+fgimage.shape[1]-hs, channel])
         aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel]

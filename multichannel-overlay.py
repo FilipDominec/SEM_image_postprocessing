@@ -88,7 +88,9 @@ image_names = sys.argv[1:]  or  getattr(config, 'input_files', '').split()
 #colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
 #colors = pnip.rgb_palette(len([s for s in image_names if not is_extra(s)])
 n_color_channels = len([s for s in image_names if not is_extra(s)])
-colors = [pnip.hsv_to_rgb(h=h) for  h in np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
+gn = getattr(config, 'green_channel_factor', 0.8) if n_color_channels>2 else 0.8
+colors = [pnip.hsv_to_rgb(h=h, green_norm=gn) for  h in 
+        np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
 colors2 = colors[::-1]
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
@@ -96,14 +98,17 @@ for image_name in image_names:
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
-    newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 1.0))
+    newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 0.91))
     image_header = annotate_image.analyze_header_XL30(image_name)
-    #if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'}
+    #if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'} ## Manual fix
 
     if getattr(config, 'force_downsample', 1.0) or \
             ((newimg.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
             (float(image_header['Magnification']) >= getattr(config, 'downsample_magn_threshold', 10000))):
         newimg = pnip.downscaletwice(newimg)
+
+    if getattr(config, 'subtract_min_brightness', False):
+        newimg -= np.min(newimg)
 
     color_tint = pnip.white if is_extra(image_name) else colors.pop()
     max_shift = int(config.rel_max_shift*newimg.shape[0])
@@ -188,10 +193,10 @@ dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
 for color, param_value in zip(colors2, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
-imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate.png')), 
+imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate__.png')), 
         annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=config.saturation_enhance)[crop_vert,crop_horiz,:]**igamma, channel_outputs[0]['imname'], 
             summary_ih, appendix_lines=dbar_appendix, 
             ))
-imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / 'composite.png'), 
+imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / 'composite__.png'), 
         annotate_image.add_databar_XL30(composite_output[crop_vert,crop_horiz,:]**igamma, channel_outputs[0]['imname'],
             summary_ih, appendix_lines=dbar_appendix))

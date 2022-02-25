@@ -19,12 +19,12 @@ License: BSD 3 clause
 
 
 # STATIC SETTINGS
-n_colors = 7
+n_colors = 6
 
-SMOOTHING_PX = .5       # higher value -> less jagged material regions, but 
+SMOOTHING_PX = 2.       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
 
-DENORM_EXP   =  .2      # partial de-normalization: Siemens EDX saves images as 
+DENORM_EXP   =  .2      # partial de-normalization: Philips EDX saves images as 
                         # normalized. The more unique levels we count in each 
                         # image, the more EDX signal there was. Select 
                         # DENORM_EXP = 1 for full proportionality, but  
@@ -37,7 +37,11 @@ FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite i
                         # use e.g. 3 for better visibility of the underlying SEM image
 
 SEM2EDX_ZOOM_CORR = 1.04    ## , the areas scanned by SEM and consequent EDX mapping are not the same
-MAX_SHIFT_LAB2SEM = 60      ## 
+MAX_SHIFT_LAB2SEM = 45      ## 
+
+FORCE_SHIFT = None
+#FORCE_SHIFT = [0,0] # positive values = SE underlayer moves towards top left corner
+#FORCE_SHIFT = [30,40] # positive values = SE underlayer moves towards top left corner
 
 #print(__doc__)
 import numpy as np
@@ -55,7 +59,7 @@ import pure_numpy_image_processing as pnip
 import annotate_image
 
 
-
+# TODO anisotropy
 
 # User input
 #n_colors = int(sys.argv[1])
@@ -72,7 +76,7 @@ for imname in imnames:
         lab_name = imname
     else:
         #try: input_layer = imageio.imread(imname)
-        #except: input_layer = load_Siemens_BMP(imname)
+        #except: input_layer = load_Philips30XL_BMP(imname)
         input_layer = pnip.safe_imload(imname)
         element_names.append(imname.rsplit('_')[-1].rsplit('.')[0])
         assert len(input_layer.shape) == 2, 'did not expect RGB images from an EDX channel'
@@ -148,13 +152,16 @@ im_LAB_resize2SEM = scipy.ndimage.zoom(im_LAB, [SEM2EDX_ZOOM_CORR * im_SEM.shape
 #imageio.imsave('edx_im_LAB_resize2SEM.png', im_LAB_resize2SEM)
 
 # Find the shift of high quality SEM image against "Lab1" image (i.e. SEM image taken during EDX map)
-shift, _ = pnip.find_affine_and_shift(
-        im_LAB_resize2SEM[:,:], 
-        im_SEM[MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM,MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM], 
-        max_shift=0.05, 
-        decim=1, 
-        detect_edges=True,
-        use_affine_transform=False)
+if FORCE_SHIFT:
+    shift = np.array(FORCE_SHIFT)
+else:
+    shift, _ = pnip.find_affine_and_shift(
+            im_LAB_resize2SEM[:,:], 
+            im_SEM[MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM,MAX_SHIFT_LAB2SEM:-MAX_SHIFT_LAB2SEM], 
+            max_shift=0.05, 
+            decim=1, 
+            detect_edges=True,
+            use_affine_transform=False)
 im_SEM3 = 0 * np.dstack(np.pad(im_SEM, MAX_SHIFT_LAB2SEM, mode='constant') for ch in range(3))[:,:,:]
 pnip.paste_overlay(im_SEM3, im_SEM, shift, np.array([1,1,1])) # , normalize=np.max(newimg_crop)
 
@@ -182,7 +189,7 @@ composite_annot = annotate_image.add_databar_XL30(composite, sys.argv[1], im_SEM
             appendix_lines= [appendix_line],
             appendix_bars = appendix_bars # TODO
             )
-imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / 'edx_composite.png'), composite_annot)
+imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / f'edx_composite_{n_colors}colors.png'), composite_annot)
 
 
 #Note this scipt replaces my original approach:
