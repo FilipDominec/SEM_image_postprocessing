@@ -7,7 +7,8 @@
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000
-downsample_magn_threshold = 15000
+#downsample_magn_threshold = 15000   # reasonably downsample (=de-noise) super-hires images
+downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
 

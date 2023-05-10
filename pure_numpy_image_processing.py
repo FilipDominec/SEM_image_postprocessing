@@ -52,7 +52,7 @@ def safe_imload(imname, retouch=False):
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
     if retouch:
-        for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)):
+        for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)): # add  (-2,1),(2,1),  for 2px-wide retouch
             mask = (im==np.max(im))
             im[mask] = np.roll(im, shift, axis)[mask]
     return im
