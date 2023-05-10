@@ -99,8 +99,16 @@ for image_name in image_names:
     newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
     newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 0.91))
+
+
     image_header = annotate_image.analyze_header_XL30(image_name)
     #if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'} ## Manual fix
+
+    # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
+    # Blur the image accordingly to reduce pixel noise, keeping useful information.
+    # (Specific for the Philips XL30 microscope.)
+    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
+    if radius > 1: newimg = pnip.blur(newimg, radius=radius)
 
     if getattr(config, 'force_downsample', 1.0) or \
             ((newimg.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
@@ -193,10 +201,20 @@ dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
 for color, param_value in zip(colors2, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
-imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate__.png')), 
-        annotate_image.add_databar_XL30(pnip.saturate(composite_output, saturation_enhance=config.saturation_enhance)[crop_vert,crop_horiz,:]**igamma, channel_outputs[0]['imname'], 
+imageio.imsave(
+        str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate__.png')), 
+        annotate_image.add_databar_XL30(
+            pnip.saturate(
+                composite_output, 
+                saturation_enhance=config.saturation_enhance)[crop_vert,crop_horiz,:]**igamma, 
+            channel_outputs[0]['imname'], 
             summary_ih, appendix_lines=dbar_appendix, 
-            ))
-imageio.imsave(str(Path(channel_outputs[0]['imname']).parent / 'composite__.png'), 
-        annotate_image.add_databar_XL30(composite_output[crop_vert,crop_horiz,:]**igamma, channel_outputs[0]['imname'],
-            summary_ih, appendix_lines=dbar_appendix))
+            )
+        )
+imageio.imsave(
+        str(Path(channel_outputs[0]['imname']).parent / 'composite__.png'), 
+        annotate_image.add_databar_XL30(
+            composite_output[crop_vert,crop_horiz,:]**igamma, 
+            channel_outputs[0]['imname'],
+            summary_ih, appendix_lines=dbar_appendix)
+        )
