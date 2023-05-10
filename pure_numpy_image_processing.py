@@ -59,18 +59,22 @@ def safe_imload(imname, retouch=False):
 
 
 
-## Colour adjustments
+## Brightness & Colour adjustments
 def auto_contrast_SEM(image, ignore_bottom_part=0.2):
     # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
     im = image - np.min(image) 
     return np.clip(im * 1. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 1)
 
-def unsharp_mask(im, weight, radius, radius2=None, clip_to_max=True):
+
+def blur(im, radius):
+    if len(np.shape(im)) == 3:      # handle channels of colour image separately
+        return np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
+    else:
+        return gaussian_filter(im, sigma=radius)
+
+def unsharp_mask(im, weight, radius, clip_to_max=True):
     if weight:
-        if len(np.shape(im)) == 3:      # handle channels of colour image separately
-            unsharp = np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
-        else:
-            unsharp = gaussian_filter(im, sigma=radius)
+        unsharp = blur(im, radius)
         im = np.clip(im*(1+weight) - unsharp*weight, 0, np.max(im) if clip_to_max else np.inf)
         #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
     return im
@@ -165,7 +169,8 @@ def downscaletwice(im):
     A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
     Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
     """
-    return zoom(convolve2d(im,[[1,1],[1,1]],mode='valid'), 
+    return zoom(
+            convolve2d(im, [[.25,.25],[.25,.25]], mode='valid'), 
             [0.5, 0.5] + [1]*(len(im.shape)-2), 
             order=1) 
 

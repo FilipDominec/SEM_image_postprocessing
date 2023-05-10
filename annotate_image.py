@@ -7,10 +7,13 @@
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000
-#downsample_magn_threshold = 15000   # reasonably downsample (=de-noise) super-hires images
-downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
+downsample_magn_threshold = 501   # reasonably downsample (=de-noise) super-hires images
+#downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
+
+#DISABLE_AUTOCONTRAST_FOR =  ('CL',)
+DISABLE_AUTOCONTRAST_FOR =  () # contrast stretch even for CL images (if individual, not a colored batch)
 
 
 
@@ -177,8 +180,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     typecase_dict, ch, cw = pnip.text_initialize()
     print(ch, cw)
 
-    if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
-        im = pnip.auto_contrast_SEM(im)
+    if not ih or detectors.get(ih['lDetName'],'') not in DISABLE_AUTOCONTRAST_FOR:  
+        im = pnip.auto_contrast_SEM(im, ignore_bottom_part=0)
 
     ## Put the logo & web on the image
     dbartop = im.shape[0] #+ch*(4+len(appendix_lines))
@@ -249,8 +252,16 @@ def annotate_individually(imnames):
                 im, 
                 pixel_anisotropy=PIXEL_ANISOTROPY, 
                 )
+
         if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
             im = pnip.downscaletwice(im)
+
+        # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
+        # Blur the image accordingly to reduce pixel noise, keeping useful information.
+        # (Specific for the Philips XL30 microscope.)
+        radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
+        if radius > 1: im = pnip.blur(im, radius=radius)
+
 
         im = add_databar_XL30(im, imname, ih)
 
