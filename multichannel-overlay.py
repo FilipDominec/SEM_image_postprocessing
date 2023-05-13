@@ -91,10 +91,11 @@ n_color_channels = len([s for s in image_names if not is_extra(s)])
 gn = getattr(config, 'green_channel_factor', 0.8) if n_color_channels>2 else 0.8
 colors = [pnip.hsv_to_rgb(h=h, green_norm=gn) for  h in 
         np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
-colors2 = colors[::-1]
+used_colors = []
 channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
+    if image_name.lower() == "dummy": colors.pop(); continue
     print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
@@ -119,7 +120,12 @@ for image_name in image_names:
     if getattr(config, 'subtract_min_brightness', False):
         newimg -= np.min(newimg)
 
-    color_tint = pnip.white if is_extra(image_name) else colors.pop()
+    if is_extra(image_name): 
+        color_tint = pnip.white 
+    else:
+        color_tint = colors.pop()
+        used_colors.insert(0, color_tint) 
+
     max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
     newimg_crop = newimg[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
@@ -177,7 +183,7 @@ crop_vert, crop_horiz = pnip.auto_crop_black_borders(composite_output, return_in
 ## Export individual channels, 
 igamma = 1 / getattr(config, 'gamma', 1.0) 
 
-for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, colors2, param_values): 
+for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, used_colors, param_values): 
     appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [color, param_value]]
     ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:]**igamma, 
             ch_dict['imname'], 
@@ -199,7 +205,7 @@ for n, ch_dict in enumerate(extra_outputs):
 ## Generate 5th line in the databar for all-channel composite images
 summary_ih = channel_outputs[0]['header']     # (take the header of the first file, assuming other have their headers identical)
 dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
-for color, param_value in zip(colors2, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
+for color, param_value in zip(used_colors, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(
