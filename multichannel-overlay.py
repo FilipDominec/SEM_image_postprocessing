@@ -108,7 +108,7 @@ for image_name in image_names:
     # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
     # Blur the image accordingly to reduce pixel noise, keeping useful information.
     # (Specific for the Philips XL30 microscope.)
-    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 1)
+    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
     print("RADI", radius)
     if radius > 1: newimg = pnip.blur(newimg, radius=radius)
 
@@ -124,7 +124,7 @@ for image_name in image_names:
         color_tint = pnip.white 
     else:
         color_tint = colors.pop()
-        used_colors.insert(0, color_tint) 
+        used_colors.append(color_tint) 
 
     max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
