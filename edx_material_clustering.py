@@ -10,11 +10,14 @@ Installation of dependencies
 
 License: BSD 3 clause
 
+
 """
 
 #TODO: try to get along without 'sklearn' dep, using
         #https://docs.scipy.org/doc/scipy/reference/cluster.html#module-scipy.cluster
         #np.random
+# TODO: check out totally different approach 
+ #https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_trainable_segmentation.html#sphx-glr-auto-examples-segmentation-plot-trainable-segmentation-py
 # TODO : fix the scalebar, it should not depend on the black borders width !
 
 

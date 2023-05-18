@@ -176,8 +176,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     typecase_dict, ch, cw = pnip.text_initialize()
     print(ch, cw)
 
-    if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
-        im = pnip.auto_contrast_SEM(im)
+    #if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
+    im = pnip.auto_contrast_SEM(im)
 
     ## Put the logo & web on the image
     dbartop = im.shape[0] #+ch*(4+len(appendix_lines))
@@ -242,14 +242,18 @@ def annotate_individually(imnames):
 
         ih = analyze_header_XL30(imname)
 
+        if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
+            im = pnip.downscaletwice(im)  # auto-downsample high-res images
+
+        if float(ih['Magnification']) >= 9000: # auto-sharpen high-res images
+            im = pnip.unsharp_mask(im, .5, float(ih['Magnification'])/10000)
+
         ## Rescale image to make pixels isotropic 
         ## Down-scale it if pixel size is far smaller than SEM resolution
         im = pnip.anisotropic_prescale(
                 im, 
                 pixel_anisotropy=PIXEL_ANISOTROPY, 
                 )
-        if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
-            im = pnip.downscaletwice(im)
 
         im = add_databar_XL30(im, imname, ih)
 
