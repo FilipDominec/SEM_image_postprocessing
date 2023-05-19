@@ -260,7 +260,11 @@ def annotate_individually(imnames):
         # Blur the image accordingly to reduce pixel noise, keeping useful information.
         # (Specific for the Philips XL30 microscope.)
         radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
-        if radius > 1: im = pnip.blur(im, radius=radius)
+        if radius > 1: 
+            if detectors.get(ih['lDetName'],'') == "CL":
+                im = pnip.blur(im, radius=radius)
+            else:
+                im = pnip.unsharp_mask(im, weight=1, radius=radius)
 
 
         im = add_databar_XL30(im, imname, ih)
