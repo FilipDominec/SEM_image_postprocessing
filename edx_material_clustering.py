@@ -22,7 +22,7 @@ License: BSD 3 clause
 
 
 # STATIC SETTINGS
-n_colors = 6
+n_colors = 4
 
 SMOOTHING_PX = 2.       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
@@ -42,9 +42,11 @@ FG_DESATURATE  = 1      # use 0 for full saturation of the resulting composite i
 SEM2EDX_ZOOM_CORR = 1.04    ## , the areas scanned by SEM and consequent EDX mapping are not the same
 MAX_SHIFT_LAB2SEM = 45      ## 
 
-FORCE_SHIFT = None
-#FORCE_SHIFT = [0,0] # positive values = SE underlayer moves towards top left corner
-#FORCE_SHIFT = [30,40] # positive values = SE underlayer moves towards top left corner
+FORCE_SHIFT = None      # if not set, it is auto-determined by image matching
+#FORCE_SHIFT = [0,0]    # positive values = SE underlayer moves towards top left corner
+#FORCE_SHIFT = [30,40]  # positive values = SE underlayer moves towards top left corner
+
+#note = "_2" # arbitrary output file note
 
 #print(__doc__)
 import numpy as np
@@ -192,7 +194,7 @@ composite_annot = annotate_image.add_databar_XL30(composite, sys.argv[1], im_SEM
             appendix_lines= [appendix_line],
             appendix_bars = appendix_bars # TODO
             )
-imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / f'edx_composite_{n_colors}colors.png'), composite_annot)
+imageio.imsave(str(pathlib.Path(sys.argv[1]).parent / f'edx_composite_{n_colors}colors{note}.png'), composite_annot)
 
 
 #Note this scipt replaces my original approach:

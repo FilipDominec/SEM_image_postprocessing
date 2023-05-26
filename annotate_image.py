@@ -7,9 +7,13 @@
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000
-downsample_magn_threshold = 15000
+downsample_magn_threshold = 501   # reasonably downsample (=de-noise) super-hires images
+#downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
+
+#DISABLE_AUTOCONTRAST_FOR =  ('CL',)
+DISABLE_AUTOCONTRAST_FOR =  () # contrast stretch even for CL images (if individual, not a colored batch)
 
 
 
@@ -60,7 +64,7 @@ def analyze_header_XL30(imname, allow_underscore_alias=True):
 
 
 
-def extract_dictkey_that_differs(dict_list, key_filter=None):
+def extract_dictkey_that_differs(dict_list, key_filter=None): # FIXME unused here? 
     """
     Similar to extract_stringpart_that_differs. Searches for the (first) key that leads to a difference among supplied dicts.
 
@@ -76,7 +80,7 @@ def extract_dictkey_that_differs(dict_list, key_filter=None):
                     return key, [d[key] for d in dict_list]
     return None, None
 
-def extract_stringpart_that_differs(str_list):
+def extract_stringpart_that_differs(str_list):  # FIXME unused here? 
     """
     Recognizes alpha- and numeric- parts of a string. Getting a list of such similar strings, finds the part that differs.
 
@@ -141,7 +145,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
                 sample_name_, author_name_ = parent.name.split('_')[:2]
             except ValueError: pass 
             if len(author_name_)==2 and author_name_.isupper():
-                return sample_name_, author_name_
+                return sample_name_.replace("~"," "), author_name_
         return '', ''
     sample_name, author_name = extract_sample_author_name(imname)
 
@@ -176,15 +180,15 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     typecase_dict, ch, cw = pnip.text_initialize()
     print(ch, cw)
 
-    #if not ih or detectors.get(ih['lDetName'],'')  not in ('CL',):  
-    im = pnip.auto_contrast_SEM(im)
+    if not ih or detectors.get(ih['lDetName'],'') not in DISABLE_AUTOCONTRAST_FOR:  
+        im = pnip.auto_contrast_SEM(im, ignore_bottom_part=0)
 
     ## Put the logo & web on the image
     dbartop = im.shape[0] #+ch*(4+len(appendix_lines))
     im = np.pad(im, [(0,ch*(4+len(appendix_lines))+int(ch/2)*len(appendix_bars))]+[(0,0)]*(len(im.shape)-1), mode='constant')
     im = pnip.put_image(im, logo_im, x=0, y=int(dbartop+ch*1))
     xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-    if xpos > 0: im = pnip.put_text(im, 'www.fzu.cz/~movpe', x=8, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+    if xpos > 0: im = pnip.put_text(im, 'movpe.fzu.cz', x=8, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
 
     if ih: 
         ## Preprocess the parameters
@@ -246,7 +250,7 @@ def annotate_individually(imnames):
             im = pnip.downscaletwice(im)  # auto-downsample high-res images
 
         if float(ih['Magnification']) >= 9000: # auto-sharpen high-res images
-            im = pnip.unsharp_mask(im, .5, float(ih['Magnification'])/10000)
+            im = pnip.unsharp_mask(im, 1, (float(ih['Magnification'])/10000)**.5)
 
         ## Rescale image to make pixels isotropic 
         ## Down-scale it if pixel size is far smaller than SEM resolution
@@ -254,6 +258,14 @@ def annotate_individually(imnames):
                 im, 
                 pixel_anisotropy=PIXEL_ANISOTROPY, 
                 )
+
+        # High-resolution CL images with high-spotsize are inherently blurred by electrn beam size.
+        # Blur the image accordingly to reduce pixel noise, keeping useful information.
+        # (Specific for the Philips XL30 microscope.)
+        if not ih or detectors.get(ih['lDetName'],'') in ("CL"):  
+            radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
+            if radius > 1: im = pnip.blur(im, radius=radius)
+
 
         im = add_databar_XL30(im, imname, ih)
 

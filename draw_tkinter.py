@@ -5,7 +5,9 @@
 import time
 import numpy as np
 import tkinter as tk
-from scipy.ndimage.filters import laplace
+
+X_SIZE, Y_SIZE = 200, 200
+X_ZOOM, Y_ZOOM = 3, 3
 
 def data2rgbarray(data,
             zoom = [1,1],
@@ -15,9 +17,12 @@ def data2rgbarray(data,
             vmax = None,
             subtract_lines_median = False,
             subtract_lines_mean = False):
+
+
     ## Preprocessing useful e.g. for scanning-probe microscopes
     if subtract_lines_median: data -= np.median(data, axis=1, keepdims=True)
     if subtract_lines_mean: data -= np.mean(data, axis=1, keepdims=True)
+
 
     ## Auto-scaling
     if vmin is None: vmin = np.min(data)
@@ -44,89 +49,79 @@ def data2rgbarray(data,
     image = np.repeat(image, max(1,int(zoom[1])), axis=1)
     ## Unzooming (decimating pixels)
     image = image[::max(1,int(1/zoom[0]+.5)), ::max(1,int(1/zoom[1]+.5))]
+
     return image
 
 def rgbarray2tkcanvas(image, canvas, image_id=1):
-    #global TKPimage
     PPMimage = f'P6 {image.shape[1]} {image.shape[0]} 255 '.encode() + np.array(image, dtype=np.int8).tobytes()
     TKPimage = tk.PhotoImage(width=image.shape[1], height=image.shape[0], data=PPMimage, format='PPM')
-    if hasattr(canvas, 'dummy_image_reference'):
-        canvas.itemconfig(image_id, image=TKPimage)
-    else:
-        #canvas.create_image(canvas.winfo_width(), canvas.winfo_height()//3, image=TKPimage, anchor=tk.NW)
-        canvas.create_image(canvas.winfo_width(), canvas.winfo_height()//3, image=TKPimage, anchor=tk.NW)
-    #print(canvas.winfo_width(), canvas.winfo_height())
-    #canvas.create_image(canvas.winfo_width(), canvas.winfo_height(), image=TKPimage, anchor=tk.NW)
+    if hasattr(canvas, 'dummy_image_reference'): canvas.itemconfig(image_id, image=TKPimage)
+    else: canvas.create_image(canvas.winfo_width(), canvas.winfo_height()//3, image=TKPimage, anchor=tk.NW)
     canvas.dummy_image_reference = TKPimage # prevents garbage collecting of the PhotoImage object
 
+def my_laplace2d(data): # if scipy is not present
+    return 4* data[1:-1, 1:-1] - data[2:, 1:-1] - data[:-2, 1:-1] - data[1:-1, 2:] - data[1:-1, :-2]
+
 times = 0
-timestart = time.time()
+time_ref = time.time()
 image = None
-def update():
+def my_update_routine():  # simulating a ripple tank, updating the plot as fast as possible
         global times
-        global timestart
+        global time_ref
 
         global data
-        global data2
+        global velocity_data
 
         times+=1
         if times%100==0:
-            print("%.02f FPS"%(times/(time.time()-timestart)))
-            times = 0
-            timestart = time.time()
+            frame.master.title(f"numpy->tkinter @ {times/(time.time()-time_ref):.1f} FPS")
+            times, time_ref = 0, time.time()
 
-        #scharr = np.array([[ -3-3j, 0-10j,  +3 -3j],
-                           #[-10+0j, 0+ 0j, +10 +0j],
-                           #[ -3+3j, 0+10j,  +3 +3j]]) # Gx + j*Gy
-        #from scipy import signal
-        #lap_ker = np.array([[ 1,  2, 1],
-                           #[ 2,-12, 2],
-                           #[ 1,  2, 1]])
-        #lapl = signal.convolve2d(data, lap_ker, boundary='symm', mode='same') 
-        lapl = laplace(data) 
+        ## Update wave equation, perhaps the preferred way if scipy present...
+        #from scipy.ndimage.filters import laplace
+        #velocity_data -= laplace(data)
 
-        data2 += lapl
-        data = data + data2*.01  #  + lapl**3*1e3
-        #data[100:] -= data2[100:] *data[100:] *1e-1 
-        #data = data + data2*2e-3 - data**5*1e1
-        #data = data  - data**5*1e1
+        ## Update wave equation, requiring only numpy
+        lapl = my_laplace2d(data) 
+        velocity_data[1:-1, 1:-1] -= my_laplace2d(data)
+        data = data + velocity_data*.03 
 
-        if not times%100:
-            data[20:150,20:50] = 0
-            data2[20:150,20:50] = 0
+        # Any numpy operation possible
+        if not times%100: velocity_data[20:150,20:50] = data[20:150,20:50] = 0    
 
-        image = data2rgbarray(data, zoom=[3,3], vmax=vmax, vmin=-vmax, cmap='redblue', emboss=0)
+        ## Update image
+        image = data2rgbarray(data, zoom=[X_ZOOM,Y_ZOOM], vmax=vmax, vmin=-vmax, cmap='viridis', emboss=3.)
         rgbarray2tkcanvas(image=image, canvas=canvas)
 
-        #image2 = data2rgbarray(data2, zoom=[3,3], vmax=vmax, vmin=0, cmap='grey', emboss=0)
-        #rgbarray2tkcanvas(image=(image*[1/26,1/26,0])**2+(image2*[0,0,1/16])**2, canvas=canvas)
-
-        root.after(1, update) # scheduling tkinter to run next update after 1 ms
+        root.after(1, my_update_routine) # scheduling tkinter to run next update after 1 ms
 
 
-
-
-
+## Prepare some initial data (smoothed noise)
 np.random.seed(seed=42)
-data = np.random.random((300, 300))
-import scipy.ndimage.filters
-data = scipy.ndimage.filters.gaussian_filter(data, sigma=12) + scipy.ndimage.filters.gaussian_filter(data, sigma=3)*.3
+data = np.random.random((X_SIZE, Y_SIZE))
 data -= np.mean(data)
-data2 = np.zeros_like(data)
-vmax = np.max(data)
+data = np.pad(data, 1)
+
+#import scipy.ndimage.filters      # (the preferred way, if scipy present)
+#data = scipy.ndimage.filters.gaussian_filter(data, sigma=12) +\
+        #scipy.ndimage.filters.gaussian_filter(data, sigma=3)*.3
+for x in range(10):
+    data[1:-1, 1:-1] = (8*data[1:-1, 1:-1] - my_laplace2d(data)) / 8
+    #data = np.pad(data,[[1,1],[1,1]])
+
+velocity_data = np.zeros_like(data)
+vmax = max(np.max(data), -np.min(data)) # fixed symmetric color range
 
 
-
-
+## Build the GUI
 root = tk.Tk()
-root.geometry("600x600+300+300")
-fr = tk.Frame()
-
-fr.master.title("numpy array as tkinter image")
-fr.pack(fill=tk.BOTH, expand=True)
-canvas = tk.Canvas(fr)
+root.geometry(f"{X_SIZE*X_ZOOM+5}x{Y_SIZE*Y_ZOOM+5}")
+frame = tk.Frame()
+frame.pack(fill=tk.BOTH, expand=True)
+canvas = tk.Canvas(frame)
 canvas.pack(fill=tk.BOTH, expand=True, anchor=tk.CENTER)
 
-update()
-canvas.create_line(250, 200,   250, 250,   200, 250,   250, 200)
+#print (time.time(), flush=1)
+my_update_routine()
+#canvas.create_line(250, 200,   250, 250,   200, 250,   250, 200) # drawings stay atop
 root.mainloop()
