@@ -6,8 +6,8 @@ import time
 import numpy as np
 import tkinter as tk
 
-X_SIZE, Y_SIZE = 200, 200
-X_ZOOM, Y_ZOOM = 3, 3
+X_SIZE, Y_SIZE = 500, 300
+X_ZOOM, Y_ZOOM = 1, 1
 
 
 class ArrayPlottingCanvas(tk.Canvas):
@@ -63,74 +63,69 @@ class ArrayPlottingCanvas(tk.Canvas):
             self.create_image(self.winfo_width(), self.winfo_height()//3, image=TKPimage, anchor=tk.NW)
         self.dummy_image_reference = TKPimage # crucial: prevents garbage collecting of the PhotoImage object
 
-def my_laplace2d(data): # if scipy is not present
-    return 4* data[1:-1, 1:-1] - data[2:, 1:-1] - data[:-2, 1:-1] - data[1:-1, 2:] - data[1:-1, :-2]
+class RippleTankDemo():
 
-times = 0
-time_ref = time.time()
-image = None
-def my_update_routine():  # simulating a ripple tank, updating the plot as fast as possible
-        #TODO (times, time_ref, data, velocity_data) = state  
-        global times
-        global time_ref
+    def __init__(self, canvas, parent_window=None):
+        self.times = 0
+        self.time_ref = time.time()
+        self.image = None
+        self.canvas = canvas
+        self.parent_window = parent_window
 
-        global data
-        global velocity_data
+        ## Prepare some initial self.data (smoothed noise)
+        np.random.seed(seed=42)
+        self.data = np.random.random((Y_SIZE, X_SIZE)) * 1
+        self.data -= np.mean(self.data)
+        self.data = np.pad(self.data, 1)
+        for x in range(100): ## initial smoothing of noise
+            self.data[1:-1, 1:-1] -= self.my_laplace2d(self.data)/8
+            #self.data = np.pad(self.data,[[1,1],[1,1]])
+        
+        self.velocity_data = np.zeros_like(self.data)
+        self.vmax = max(np.max(self.data), -np.min(self.data)) # fixed symmetric color range
+        #vmax = 2
 
-        times+=1
-        if times%100==0:
-            frame.master.title(f"numpy->tkinter @ {times/(time.time()-time_ref):.1f} FPS")
-            times, time_ref = 0, time.time()
 
-        ## Update wave equation, perhaps the preferred way if scipy present...
+    def my_laplace2d(self, data): # if scipy is not present
+        return 4* self.data[1:-1, 1:-1] - self.data[2:, 1:-1] - self.data[:-2, 1:-1] - self.data[1:-1, 2:] - self.data[1:-1, :-2]
+
+
+    def my_update_routine(self):  # simulating a ripple tank, updating the plot as fast as possible
+
+        self.times+=1
+        if self.times%100==0:
+            if self.parent_window:
+                self.parent_window.title(f"numpy->tkinter @ {self.times/(time.time()-self.time_ref):.1f} FPS")
+            self.times, self.time_ref = 0, time.time()
+
+        ## Update wave equation, if scipy present this is perhaps the preferred way ...
         #from scipy.ndimage.filters import laplace
-        #velocity_data -= laplace(data)
+        #self.velocity_data -= laplace(self.data)
 
-        ## Update wave equation, requiring only numpy
-        lapl = my_laplace2d(data) 
-        velocity_data[1:-1, 1:-1] -= my_laplace2d(data)
-        data += velocity_data*0.4       # (more than 0.4 is unstable)
-        data[20:150,120:150] -= velocity_data[20:150,120:150]*0.35 # Here the wave is much slower (..e. shallow water?)
+        ## Update wave equation
+        lapl = self.my_laplace2d(self.data) 
+        self.velocity_data[1:-1, 1:-1] -= lapl
+        self.data += self.velocity_data*0.4       # (more than 0.4 is unstable)
+        self.data[1:-1, 1:-1] -= lapl/1e3   # gently dampen highest spatial frequencies (avoid pixel-wise noise)
 
-        ## Slight artificial smoothing to dampen pixel-wise noise (avoid numeric dispersion near Brillouin-zone edge)
-        data[1:-1, 1:-1] -= my_laplace2d(data)/3e3
-
-
-
-        # Any "real-time" interaction possible
-        #if not times%1: # ... region of smooth wave damping
-            #velocity_data[20:150,20:50] *= .8 
-
-        #data = np.roll(data, 1, axis=1); velocity_data = np.roll(velocity_data, 1, axis=1) # ... moving medium 
-
-        data[165:170,125:130] += .1    # ... stirring the pond, causing shock wave if medium moves
-
+        # Any "real-time" interaction possible, examples:
+        self.data[20:150,120:150] -= self.velocity_data[20:150,120:150]*0.35 # region of shallow water (the wave is much slower)
+        if not self.times%1: self.velocity_data[20:150,20:50] *= .8      # region of smooth wave damping
+        if not self.times%100: 
+            self.data[170:180,125:145] += .1    # ... stirring the pond, causing shock wave if medium moves
+        #self.data = np.roll(self.data, 1, axis=1); self.velocity_data = np.roll(self.velocity_data, 1, axis=1) # ... moving medium 
 
 
         ## Update image
-        image = canvas.plot_2d_array(data, zoom=[X_ZOOM,Y_ZOOM], vmax=vmax, vmin=-vmax, cmap='viridis', shading=3.)
+        self.canvas.plot_2d_array(
+                self.data, 
+                zoom=[Y_ZOOM,X_ZOOM], 
+                vmax=self.vmax, 
+                vmin=-self.vmax, 
+                cmap='sky', 
+                shading=3.)
 
-        root.after(1, my_update_routine) # scheduling tkinter to run next update after 1 ms
-
-
-## Prepare some initial data (smoothed noise)
-np.random.seed(seed=42)
-data = np.random.random((X_SIZE, Y_SIZE)) * 1
-data -= np.mean(data)
-data = np.pad(data, 1)
-
-#import scipy.ndimage.filters      # (the preferred way, if scipy present)
-#data = scipy.ndimage.filters.gaussian_filter(data, sigma=12) +\
-        #scipy.ndimage.filters.gaussian_filter(data, sigma=3)*.3
-for x in range(100):
-    data[1:-1, 1:-1] = data[1:-1, 1:-1] - my_laplace2d(data)/8
-    #data = np.pad(data,[[1,1],[1,1]])
-
-velocity_data = np.zeros_like(data)
-vmax = max(np.max(data), -np.min(data)) # fixed symmetric color range
-#vmax = 2
-
-#TODO state = [times, time_ref, data, velocity_data]
+        root.after(1, self.my_update_routine) # scheduling tkinter to run next update after 1 ms
 
 
 ## Build the GUI
@@ -142,7 +137,8 @@ frame.pack(fill=tk.BOTH, expand=True)
 canvas = ArrayPlottingCanvas(frame)
 canvas.pack(fill=tk.BOTH, expand=True, anchor=tk.CENTER)
 
-#print (time.time(), flush=1)
-my_update_routine()
-#canvas.create_line(250, 200,   250, 250,   200, 250,   250, 200) # drawings stay atop
+rippletank = RippleTankDemo(canvas=canvas, parent_window=frame.master)
+rippletank.my_update_routine() # start the simulation
+
+canvas.create_line(250, 200,   250, 250,   200, 250,   250, 200) # drawings stay atop
 root.mainloop()
