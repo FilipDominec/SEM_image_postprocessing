@@ -11,6 +11,7 @@ downsample_magn_threshold = 501   # reasonably downsample (=de-noise) super-hire
 #downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
+ROTATE180 = 0 # False
 
 #DISABLE_AUTOCONTRAST_FOR =  ('CL',)
 DISABLE_AUTOCONTRAST_FOR =  () # contrast stretch even for CL images (if individual, not a colored batch)
@@ -253,6 +254,10 @@ def annotate_individually(imnames):
                 pixel_anisotropy=PIXEL_ANISOTROPY, 
                 )
 
+
+        if ROTATE180: 
+            im = im[::-1, ::-1]
+        
         if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
             im = pnip.downscaletwice(im)
 
