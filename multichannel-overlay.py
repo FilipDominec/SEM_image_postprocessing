@@ -205,7 +205,8 @@ for n, ch_dict in enumerate(extra_outputs):
 ## Generate 5th line in the databar for all-channel composite images
 summary_ih = channel_outputs[0]['header']     # (take the header of the first file, assuming other have their headers identical)
 dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
-for color, param_value in zip(used_colors, param_values): dbar_appendix[0].append([color,' '+param_value]) ## append to 0th line of the appending
+print(used_colors, pnip.white)
+for color, param_value in zip(used_colors, param_values): dbar_appendix[0].append([np.mean([color,pnip.white], axis=0),' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(
