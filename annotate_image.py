@@ -11,6 +11,7 @@ downsample_magn_threshold = 501   # reasonably downsample (=de-noise) super-hire
 #downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
+ROTATE180 = 0 # False
 
 #DISABLE_AUTOCONTRAST_FOR =  ('CL',)
 DISABLE_AUTOCONTRAST_FOR =  () # contrast stretch even for CL images (if individual, not a colored batch)
@@ -259,12 +260,24 @@ def annotate_individually(imnames):
                 pixel_anisotropy=PIXEL_ANISOTROPY, 
                 )
 
-        # High-resolution CL images with high-spotsize are inherently blurred by electrn beam size.
+        if ROTATE180: 
+            im = im[::-1, ::-1]
+        
+        if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
+            im = pnip.downscaletwice(im)
+
+        # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
         # Blur the image accordingly to reduce pixel noise, keeping useful information.
         # (Specific for the Philips XL30 microscope.)
-        if not ih or detectors.get(ih['lDetName'],'') in ("CL"):  
-            radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
-            if radius > 1: im = pnip.blur(im, radius=radius)
+        radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
+        if radius > 1: 
+            if detectors.get(ih['lDetName'],'') == "CL":
+                im = pnip.blur(im, radius=radius)
+            else:
+                im = pnip.unsharp_mask(im, weight=1, radius=radius)
+        #if not ih or detectors.get(ih['lDetName'],'') in ("CL"):  
+            #radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
+            #if radius > 1: im = pnip.blur(im, radius=radius)
 
 
         im = add_databar_XL30(im, imname, ih)
