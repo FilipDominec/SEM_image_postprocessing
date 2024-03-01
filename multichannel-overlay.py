@@ -183,8 +183,11 @@ crop_vert, crop_horiz = pnip.auto_crop_black_borders(composite_output, return_in
 ## Export individual channels, 
 igamma = 1 / getattr(config, 'gamma', 1.0) 
 
+def pale(color): # average R,G,B values with white - for better readability of colored text
+    return np.mean([color, pnip.white], axis=0)
+
 for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, used_colors, param_values): 
-    appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [color, param_value]]
+    appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [pale(color), param_value]]
     ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:]**igamma, 
             ch_dict['imname'], 
             ch_dict['header'], 
@@ -206,7 +209,8 @@ for n, ch_dict in enumerate(extra_outputs):
 summary_ih = channel_outputs[0]['header']     # (take the header of the first file, assuming other have their headers identical)
 dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
 print(used_colors, pnip.white)
-for color, param_value in zip(used_colors, param_values): dbar_appendix[0].append([np.mean([color,pnip.white], axis=0),' '+param_value]) ## append to 0th line of the appending
+for color, param_value in zip(used_colors, param_values): 
+    dbar_appendix[0].append([pale(color),' '+param_value]) ## append to 0th line of the appending
 
 composite_output /= np.max(composite_output) # normalize all channels
 imageio.imsave(
