@@ -24,6 +24,7 @@ import sys, time, imageio, warnings, pathlib
 warnings.filterwarnings("ignore")
 import pure_numpy_image_processing as pnip
 
+
 ## (microscope-dependent settings)
 detectors = {'0': 'SE', '2':'Aux', '3':'CL'}
 
@@ -240,8 +241,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 
 
 ## Load images
-def annotate_individually(imnames):
-    for imname in imnames:
+def annotate_individually(imname):
         print(f'Annotating {imname}')
         im = pnip.safe_imload(imname, retouch=True)
 
@@ -294,8 +294,32 @@ def annotate_individually(imnames):
             print('Error: image {:} skipped: \n\n'.format(outname), e,traceback.print_exc() ), traceback.print_exc()
             
 if __name__ == '__main__':
-    imnames = sys.argv[1:]
-    if imnames: annotate_individually(imnames)
-    else: print("Please specify one or more TIF files to be processed individually")
+    #imnames = sys.argv[1:]
+
+    if len(sys.argv) >= 2:
+        imnames = sys.argv[1:]
+    else:
+        import tkinter
+        root = tkinter.Tk() 
+        root.withdraw()
+        import tkinter.filedialog
+        imnames = tkinter.filedialog.askopenfilenames(filetypes=[("TIF images from Philips XL30 SEM", "*.tif *.TIF"), ("All files", "*.*"),])
+        print("imnames", imnames)
+        #else: print("Please specify one or more TIF files to be processed individually")
+
+    # TODO ask if TIF images are to be moved into orig/ subfolder
+    for imname in imnames:
+        annotate_individually(imname)
+
+    from tkinter import messagebox
+    if len(sys.argv)<2 and \
+            messagebox.askquestion("Images converted", "Do you want to move the original TIF files into an 'orig' subfolder? "):
+        for imname in imnames:
+            from pathlib import Path
+            src = Path(imname)
+            dst = src.parent/'orig'/src.name
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            src.rename(dst)
+            print(f'Cleanup of TIF sources: moving {src} to {dst}')
 
 
