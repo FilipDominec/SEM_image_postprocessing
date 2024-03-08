@@ -162,7 +162,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         Rounding to closest power of 10 is obtained simply with 
             mantissa_thresholds=(1,)
 
-        In electrical engineering, standard resistor values are given by
+        In electrical engineering, standard E6 resistor values are given by
             mantissa_thresholds=(1, 1.5, 2.2, 3.3, 4.7, 6.8)
         >>> log_floor(0.15)
         0.10000000000000001
@@ -179,7 +179,8 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 
     ## Initialize raster graphics to be put in the image
     logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
-    typecase_dict, ch, cw = pnip.text_initialize()
+    typecase_dict, ch, cw = pnip.text_initialize(typecase_rel_path='typecase.png')
+    typecase_dict2, ch2, cw2 = pnip.text_initialize(typecase_rel_path='typecase2.png')
     print(ch, cw)
 
     if not ih or detectors.get(ih['lDetName'],'') not in DISABLE_AUTOCONTRAST_FOR:  
@@ -190,7 +191,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     im = np.pad(im, [(0,ch*(4+len(appendix_lines))+int(ch/2)*len(appendix_bars))]+[(0,0)]*(len(im.shape)-1), mode='constant')
     im = pnip.put_image(im, logo_im, x=0, y=int(dbartop+ch*1))
     xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
-    if xpos > 0: im = pnip.put_text(im, 'movpe.fzu.cz', x=8, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+    if xpos > 0: im = pnip.put_text(im, 'movpe.fzu.cz', x=8, y=dbartop+ch*3, typecase_dict=typecase_dict, color=.6)
 
     if ih: 
         ## Preprocess the parameters
@@ -205,29 +206,33 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
         elif scale_bar < 1:      scale_num, scale_unit = scale_bar * 1000, 'nm' 
         else:                    scale_num, scale_unit = scale_bar,        'μm' 
-        im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13} {:<8}'.format(
-            'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY', 'Scale:'), x=xpos, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
-        im = pnip.put_text(im, '{:<.0f} {:}'.format(
-            scale_num, scale_unit), x=xpos+cw*49, y=dbartop+ch*0, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
-        im = pnip.put_scale(im, xpos+cw*42, dbartop+ch*1, ch, int(scale_bar/size_x*im.shape[1]))
+        im = pnip.put_text(im, '{:<6} {:<6} {:<6} {:<6} {:<13}'.format(
+            'AccV', 'Spot', 'WDist', 'Magnif', 'DimXY'), x=xpos, y=dbartop+ch*0, typecase_dict=typecase_dict, color=.6)
+
+        scale_text = '{:<.0f} {:}'.format(scale_num, scale_unit)
+        im = pnip.put_text(im, 
+                '{:<.0f} {:}'.format(scale_num, scale_unit), 
+                x=xpos+cw*50 - cw2*len(scale_text)//2, y=dbartop+ch*0, typecase_dict=typecase_dict2, color=1)
+        scale_width = int(scale_bar/size_x*im.shape[1])
+        im = pnip.put_scale(im, xpos+cw*50 - scale_width//2, dbartop+ch*2, ch, scale_width)
         im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
             float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
             '{:<.0f}'.format(float(ih['Magnification']))+'×', 
-            size_str), x=xpos, y=dbartop+ch*1, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+            size_str), x=xpos, y=dbartop+ch*1, typecase_dict=typecase_dict, color=1)
 
         ## Print the second couple of rows in the databar
         im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-            'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, cw=cw, ch=ch, typecase_dict=typecase_dict, color=.6)
+            'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, typecase_dict=typecase_dict, color=.6)
         im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
             detectors.get(ih['lDetName'],''), 
             author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
-            sample_name), x=xpos, y=dbartop+ch*3, cw=cw, ch=ch, typecase_dict=typecase_dict, color=1)
+            sample_name), x=xpos, y=dbartop+ch*3, typecase_dict=typecase_dict, color=1)
 
     for nline, line in enumerate(appendix_lines):
         xcaret = xpos
         for color, content in line:
             #if type(content) == str:
-            im = pnip.put_text(im, content, x=xcaret, y=dbartop+ch*(4+nline), cw=cw, ch=ch, typecase_dict=typecase_dict, color=color)
+            im = pnip.put_text(im, content, x=xcaret, y=dbartop+ch*(4+nline), typecase_dict=typecase_dict, color=color)
             xcaret += cw*len(content)
     for nline, barline in enumerate(appendix_bars):
         xcaret = xpos+2
@@ -313,7 +318,7 @@ if __name__ == '__main__':
 
     from tkinter import messagebox
     if len(sys.argv)<2 and \
-            messagebox.askquestion("Images converted", "Do you want to move the original TIF files into an 'orig' subfolder? "):
+            messagebox.askquestion("Images converted", "Do you want to move the original TIF files into an 'orig' subfolder? ") == 'yes':
         for imname in imnames:
             from pathlib import Path
             src = Path(imname)

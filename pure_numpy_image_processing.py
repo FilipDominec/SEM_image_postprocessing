@@ -228,17 +228,28 @@ def text_initialize(typecase_rel_path='typecase.png'):
     except FileNotFoundError:
         print('No type set found. To generate one: \n\t0. (optionally) turn on moderate pixel hinting, but disable ' +\
                 '"RGB sub-pixel hinting" \n\t1. make a screenshot of the line below, \n\t2. convert it to grayscale, '+\
-                '\n\t3. crop the text between delimiting blocks and \n\t 4. save it in this folder as typecase.png')
+                '\n\t3. crop the 144 glyphs between delimiting blocks and \n\t 4. save it in this folder as typecase.png')
         print(chr(0x2588)+typecase_str.replace('\\',chr(0x29f5))+chr(0x2588)) # (prevents backslash escaping)
     ch, cw = typecase_img.shape[0], round(typecase_img.shape[1]/len(typecase_str)) ## character height and width
     typecase_dict = dict([(c, typecase_img[:,cw*n:cw*n+cw]) for n,c in enumerate(typecase_str)]) ## lookup dict for glyphs
+    typecase_dict['ch'], typecase_dict['cw'] = ch, cw
     return typecase_dict, ch, cw
 
-def put_text(im, text, x, y, cw, ch, typecase_dict, color=1):
+def put_text(im, text, x, y, typecase_dict, color=1, scale=1):
+    ch, cw  = typecase_dict['ch'], typecase_dict['cw']
     for n,c in enumerate(text): 
-        if x+cw+cw*n>im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
+        if x+cw*(n+1)*scale > im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
         else: 
-            im[y:y+ch, x+cw*n:x+cw*(n+1)] = match_wb_and_color(im, typecase_dict.get(c, typecase_dict['?'])) * color
+            glyph = typecase_dict.get(c, typecase_dict['?'])
+            if scale > 1:
+                glyph = np.repeat(glyph, max(1,int(scale)), axis=0)
+                glyph = np.repeat(glyph, max(1,int(scale)), axis=1)
+                for gx in range(1, glyph.shape[0]-1):
+                    for gy in range(1, glyph.shape[1]-1):
+
+                        glyph[gx,gy] = np.modus([glyph[gx,gy]]*1 + [glyph[gx+dx,gy+dy] for dx in [-1,0,1] for dy in  [-1,0,1]]  )
+            #print (im[y:y+ch*scale, x+cw*n*scale:x+cw*(n+1)*scale].shape , glyph.shape)
+            im[y:y+ch*scale, x+cw*n*scale:x+cw*(n+1)*scale] = match_wb_and_color(im, glyph) * color
     return im
 
 def put_image(im, inserted_img, x, y, color=1):
