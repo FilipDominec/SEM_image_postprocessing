@@ -325,7 +325,7 @@ def annotate_individually(imname):
         # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
         # Blur the image accordingly to reduce pixel noise, keeping useful information.
         # (Specific for the Philips XL30 microscope.)
-        radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
+        radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2.5)
         if radius > 1: 
             if detectors.get(ih['lDetName'],'') == "CL":
                 im = pnip.blur(im, radius=radius)
