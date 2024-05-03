@@ -82,6 +82,23 @@ def extract_dictkey_that_differs(dict_list, key_filter=None): # FIXME unused her
                     return key, [d[key] for d in dict_list]
     return None, None
 
+
+def split_string_alpha_numeric(name):
+    """
+    Splits a string into minimum number of chunks, so that each chunk either
+    1) contains number-like characters [ASCII number less than ord("A")], or,
+    2) contains letter-like characters [ASCII number equal or more than ord("A")].
+    Additionally, underscore _ is always split, serving as a forced separator.
+    Last dot is split, too, as it usually separates file name extension.
+    Number- and letter-like chunks are returned in a list of strings (no conversion).
+    >>> split_string_alpha_numeric('10.3K380.TIF')
+    ['10.3', 'K', '380', 'TIF']
+    >>> split_string_alpha_numeric('10.3K3_80.TIF')
+    ['10.3', 'K', '3', '80', 'TIF']
+    """
+    return ''.join((l+' ' if (ord(r)-63)*(ord(l)-63)<0 else l) for l,r in zip(name,name[1:]+'_'))[::-1].replace('.',' ',1)[::-1].split()
+
+
 def extract_stringpart_that_differs(str_list):  # FIXME unused here? 
     """
     Recognizes alpha- and numeric- parts of a string. Getting a list of such similar strings, finds the part that differs.
@@ -89,20 +106,6 @@ def extract_stringpart_that_differs(str_list):  # FIXME unused here?
     >>> extract_stringpart_that_differs(['10.3K380.TIF', '10.3K400.TIF', '10.3K420.TIF',])
     ('λ(nm)', ('380', '400', '420'))
     """
-    def split_string_alpha_numeric(name):
-        """
-        Splits a string into minimum number of chunks, so that each chunk either
-        1) contains number-like characters [ASCII number less than ord("A")], or,
-        2) contains letter-like characters [ASCII number equal or more than ord("A")].
-        Additionally, underscore _ is always split, serving as a forced separator.
-        Last dot is split, too, as it usually separates file name extension.
-        Number- and letter-like chunks are returned in a list of strings (no conversion).
-        >>> split_string_alpha_numeric('10.3K380.TIF')
-        ['10.3', 'K', '380', 'TIF']
-        >>> split_string_alpha_numeric('10.3K3_80.TIF')
-        ['10.3', 'K', '3', '80', 'TIF']
-        """
-        return ''.join((l+' ' if (ord(r)-63)*(ord(l)-63)<0 else l) for l,r in zip(name,name[1:]+'_'))[::-1].replace('.',' ',1)[::-1].split()
     str_list = list(str_list)
     assert len(str_list)>1
     assert isinstance(str_list[0], str)
@@ -111,7 +114,6 @@ def extract_stringpart_that_differs(str_list):  # FIXME unused here?
             if field != column[0]:
                 return column
     return None # i.e. all strings are the same?
-
 
 
 def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[],):
@@ -260,8 +262,20 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         ## Print the second couple of rows in the databar
         im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
             'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, typecase_dict=typecase_dict, color=.6)
+        detname = detectors.get(ih['lDetName'],'')
+        print(detname)
+        if detname == 'CL':
+            try: 
+                print(imname)
+                print(split_string_alpha_numeric(imname)[:3])
+                p_kV, p_mag, p_wl = split_string_alpha_numeric(imname)[:3]
+                print(p_kV, p_mag, p_wl)
+                print(float(p_kV), p_mag, int(p_wl))
+                detname += ' ~'+p_wl+'nm'
+            except:
+                pass
         im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
-            detectors.get(ih['lDetName'],''), 
+            detname, 
             author_name+(' ' if author_name else '')+time.strftime('%Y-%m-%d', time.gmtime(pathlib.Path(imname).stat().st_ctime)), 
             sample_name), x=xpos, y=dbartop+ch*3, typecase_dict=typecase_dict, color=1)
 
