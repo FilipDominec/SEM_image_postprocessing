@@ -134,20 +134,57 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         * the same image with a meaningful databar in the image bottom
     """
 
-    def extract_sample_author_name(filepath, max_depth=3):
+    def extract_sample_author_name(filepath, max_depth=3, author_using_underscore="FH",
+            ignore_subdirs=['orig']):
         """ 
-        This function assumes that directories are named as SS*_AA_YYMMDD/ 
-        where SSSSS is the sample name, AA author and YYMMDD is the date.
+        Some practical heuristic for visually labelling images being converted:
+
+        1) This function first assumes that directories are named as SS*_AA_YYMMDD/ 
+        where SSSSS is the sample name, AA author and YYMMDD is the date (which is not 
+        used, as the TIFF file save date is more relevant).
+
+        2) If this pattern is not detected, next attempt is to check for underscore at the 
+        filename end. Then sample name is extracted easily, and AUTHOR_USING_UNDERSCORE 
+        is assumed.
+
+        In any case, multiple level of parent directories can be searched. If there is 
+        a match to one of above rules, the previous subdirectory name searched before is 
+        added to the overall name. An exception to this rule are those subdir names that 
+        are listed among ignore_subdirs.
+
+        Note that tilde can be used as a placeholder for a space in the name, when convenient. 
+        
         >>> extract_sample_author_name('./123_JD_200725/')  # to test, make the dir first
         ('123', 'JD')
+        >>> extract_sample_author_name('./123_JD_200725/placeA')  # to test, make the dir first
+        ('123 placeA', 'JD')
+        >>> extract_sample_author_name('./123_')  # to test, make the dir first
+        ('123', 'FH')
+        >>> extract_sample_author_name('./123_/placeA')  # to test, make the dir first
+        ('123 placeA', 'FH')
         """
-        sample_name_, author_name_ = '', ''
+        sample_name_, author_name_, prev_parent = '', '', None   ## Heuristic no. 1
         for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
             try: 
                 sample_name_, author_name_ = parent.name.split('_')[:2]
             except ValueError: pass 
             if len(author_name_)==2 and author_name_.isupper():
-                return sample_name_.replace("~"," "), author_name_
+                sample_name_ = sample_name_.replace("~"," ")
+                if prev_parent: sample_name_ += ' ' + prev_parent.name
+                return sample_name_, author_name_
+            if parent.name not in ignore_subdirs:
+                prev_parent = parent
+
+        sample_name_, author_name_, prev_parent = '', '', None   ## Heuristic no. 2
+        for parent in list(pathlib.Path(filepath).resolve().parents)[:max_depth]:
+            if parent.name.endswith('_'):
+                sample_name_ = parent.name.rstrip("_").replace("~"," ")
+                if prev_parent: sample_name_ += ' ' + prev_parent.name
+                return sample_name_, author_using_underscore
+            if parent.name not in ignore_subdirs:
+                prev_parent = parent
+
+        print("Warning: could not autodetect real sample name for", filepath)
         return '', ''
     sample_name, author_name = extract_sample_author_name(imname)
 
