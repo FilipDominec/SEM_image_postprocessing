@@ -199,20 +199,15 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
     #fgimage = np.dstack([fgimage]*3) # XXX
     for channel in range(3):
         vs, hs = shiftvec.astype(int)
-        print(vs, hs)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
-        print("DEBUG: vc = ", vc)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
-        print("DEBUG: hc = ", hc)
-        if channel == 0:
-            print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
-            print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
+        #if channel == 0:
+            #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
+            #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
         #print('idx ..........', [vc-vs, vc+fgimage.shape[0]-vs, hc-hs,hc+fgimage.shape[1]-hs, channel])
         aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel]
-        print("DEBUG: aa = ", aa.shape)
-        print("DEBUG: fgimage = ", fgimage.shape)
         aa += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
                 #fgimage**channel_exponent*float(color[channel]) 
 
