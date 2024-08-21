@@ -1,9 +1,6 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
-# Note: visually, any de-noising technique seems to obstruct the scientific
-#   value so no median filters etc. applied. Downscaling makes sense for 
-#   high-magnif imgs, though.
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000
@@ -116,7 +113,8 @@ def extract_stringpart_that_differs(str_list):  # FIXME unused here?
     return None # i.e. all strings are the same?
 
 
-def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[],):
+def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[], 
+        auto_label_CL_images=True, convert_to_int8=True):
     """
     Input:
         * image (as a 2D numpy array), 
@@ -220,7 +218,6 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     logo_im = pnip.safe_imload(pnip.inmydir('logo.png'))
     typecase_dict, ch, cw = pnip.text_initialize(typecase_rel_path='typecase.png')
     typecase_dict2, ch2, cw2 = pnip.text_initialize(typecase_rel_path='typecase2.png')
-    print(ch, cw)
 
     if not ih or detectors.get(ih['lDetName'],'') not in DISABLE_AUTOCONTRAST_FOR:  
         im = pnip.auto_contrast_SEM(im, ignore_bottom_part=0)
@@ -263,14 +260,12 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         im = pnip.put_text(im, '{:<13} {:<13} {:<11}'.format(
             'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, typecase_dict=typecase_dict, color=.6)
         detname = detectors.get(ih['lDetName'],'')
-        print(detname)
-        if detname == 'CL':
+        #print(detname)
+        if auto_label_CL_images and detname == 'CL': # 
             try: 
-                print(imname)
-                print(split_string_alpha_numeric(imname)[:3])
+                # Note: by default the channels represent wavelength from 3rd position in the name, but 
+                # you can manually choose also p_kV for acc. voltage
                 p_kV, p_mag, p_wl = split_string_alpha_numeric(imname)[:3]
-                print(p_kV, p_mag, p_wl)
-                print(float(p_kV), p_mag, int(p_wl))
                 detname += ' ~'+p_wl+'nm'
             except:
                 pass
@@ -292,7 +287,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
                 im = pnip.put_bar(im, x=xcaret, y=dbartop+ch*(4+len(appendix_lines))+int(ch/2)*nline, h=int(ch/2-1), xw=bar.get('xwidth'), color=bar.get('color',1))
                 xcaret += bar.get('xpitch')
 
-    return im
+    return np.uint8(im*256-.5) if convert_to_int8 else im
 
 
 
@@ -328,7 +323,7 @@ def annotate_individually(imname):
         radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2.5)
         if radius > 1: 
             if detectors.get(ih['lDetName'],'') == "CL":
-                im = pnip.blur(im, radius=radius)
+                im = pnip.blur(im, radius=radius, twopixel_despike=True)
             else:
                 im = pnip.unsharp_mask(im, weight=1, radius=radius)
         #if not ih or detectors.get(ih['lDetName'],'') in ("CL"):  

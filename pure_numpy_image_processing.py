@@ -19,7 +19,7 @@ TODO: make this compatible with https://scipy-lectures.org/advanced/image_proces
 
 import imageio, pathlib
 import numpy as np
-from scipy.ndimage.filters import laplace, gaussian_filter
+from scipy.ndimage.filters import laplace, gaussian_filter, median_filter, minimum_filter
 from scipy.ndimage import affine_transform, zoom
 from scipy.signal import correlate2d, convolve2d
 from scipy.optimize import differential_evolution
@@ -66,11 +66,16 @@ def auto_contrast_SEM(image, ignore_bottom_part=0.2):
     return np.clip(im * 1. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 1)
 
 
-def blur(im, radius):
+def blur(im, radius, twopixel_despike=False):
+    def blurring_filter(ch, **kwargs):
+        if twopixel_despike:
+            ch = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2) # vertical pixel-wise de-spiking
+        return gaussian_filter(ch, **kwargs)
+
     if len(np.shape(im)) == 3:      # handle channels of colour image separately
-        return np.dstack([gaussian_filter(channel, sigma=radius) for channel in im])
+        return np.dstack([blurring_filter(channel, sigma=radius) for channel in im])
     else:
-        return gaussian_filter(im, sigma=radius)
+        return blurring_filter(im, sigma=radius)
 
 def unsharp_mask(im, weight, radius, clip_to_max=True):
     if weight:
@@ -189,6 +194,10 @@ def auto_crop_black_borders(im, return_indices_only=False):
 ## Text/image/drawing overlay routines
 white = [1,1,1]
 
+def pale(color): # average R,G,B values with white - for better readability of colored text
+    return np.mean([color, white], axis=0)
+
+
 def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_exponent=1.):
     """ 
     Image addition (keeps background image) with specified color_tint
@@ -199,11 +208,8 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
     #fgimage = np.dstack([fgimage]*3) # XXX
     for channel in range(3):
         vs, hs = shiftvec.astype(int)
-        print(vs, hs)
         vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
-        #print("DEBUG: vc = ", vc)
         hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
-        #print("DEBUG: hc = ", hc)
         #if channel == 0:
             #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
             #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
@@ -211,8 +217,6 @@ def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_e
         aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel]
-        #print("DEBUG: aa = ", aa.shape)
-        #print("DEBUG: fgimage = ", fgimage.shape)
         aa += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
                 #fgimage**channel_exponent*float(color[channel]) 
 

@@ -22,7 +22,7 @@ License: BSD 3 clause
 
 
 # STATIC SETTINGS
-n_colors = 4
+n_colors = 6
 
 SMOOTHING_PX = 1.       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 

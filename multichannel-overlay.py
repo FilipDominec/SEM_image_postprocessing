@@ -96,21 +96,25 @@ channel_outputs, extra_outputs = [], []
 shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
 for image_name in image_names:
     if image_name.lower() == "dummy": colors.pop(); continue
-    print('loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
+    print('Loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
-    newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 0.91))
-
 
     image_header = annotate_image.analyze_header_XL30(image_name)
     #if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'} ## Manual fix
 
+
+    ## Image pre-processing
+
     # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
     # Blur the image accordingly to reduce pixel noise, keeping useful information.
     # (Specific for the Philips XL30 microscope.)
-    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
-    print("RADI", radius)
-    if radius > 1: newimg = pnip.blur(newimg, radius=radius)
+    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.5 - 2.0)
+    if radius > 1: 
+        print("De-noising with Gaussian blur with radius", radius, "px, estimated for SEM resolution (at this magnification & spotsize)")
+        newimg = pnip.blur(newimg, radius=radius, twopixel_despike=True)
+
+    newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 0.91))
 
     if getattr(config, 'force_downsample', 1.0) or \
             ((newimg.shape[1] > getattr(config, 'downsample_size_threshold', 1000)) and 
@@ -120,12 +124,9 @@ for image_name in image_names:
     if getattr(config, 'subtract_min_brightness', False):
         newimg -= np.min(newimg)
 
-    if is_extra(image_name): 
-        color_tint = pnip.white 
-    else:
-        color_tint = colors.pop()
-        used_colors.append(color_tint) 
 
+
+    ## Geometrical transform - co-aligning images
     max_shift = int(config.rel_max_shift*newimg.shape[0])
     if 'image_padding' not in locals(): image_padding = max_shift*len(image_names) ## temporary very wide black padding for image alignment
     newimg_crop = newimg[max_shift:-max_shift-int(newimg.shape[0]*config.databar_pct):config.decim, max_shift:-max_shift:config.decim]*1.0
@@ -138,7 +139,7 @@ for image_name in image_names:
                 rel_smoothing=config.rel_smoothing)
         shiftvec_sum += shiftvec_new 
         trmatrix_sum += (trmatrix_new - np.eye(2))*config.trmatrix_factor
-        print('... is shifted by {:}px against its reference image and by {:}px against the first one'.format(
+        print('... detected as shifted by {:}px against its reference image and by {:}px against the first one'.format(
             shiftvec_new, shiftvec_sum))
 
     newimg_processed = pnip.my_affine_tr(        ## Process the new image: sharpening, affine transform, and padding...
@@ -146,6 +147,13 @@ for image_name in image_names:
                     pad_width=max_shift, mode='constant'), trmatrix_sum) 
     
             
+    ## Color & brightness adjustment
+    if is_extra(image_name): 
+        color_tint = pnip.white 
+    else:
+        color_tint = colors.pop()
+        used_colors.append(color_tint) 
+
     img_norm =  np.max(newimg_crop)**(1-config.max_brightness_norm) * (np.mean(newimg_crop)*6)**config.mean_brightness_norm
     if not is_extra(image_name):            ## ... then shifting and adding the image to the composite canvas
         if 'composite_output' not in locals(): 
@@ -167,10 +175,10 @@ for image_name in image_names:
     if 'refimg' not in locals() or (config.consecutive_alignment and not is_extra(image_name)): ## store the image as a reference
         refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*config.databar_pct):config.decim, ::config.decim]*1.0
 
-## Generate 5th line in the databar: color coding explanation
+## Auto-generate naming of the individual channels
 param_key, param_values = annotate_image.extract_dictkey_that_differs([co['header'] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
-print(param_key, param_values)
-print(getattr(config, 'force_label_by_filename', False), config)
+#print(param_key, param_values)
+#print(getattr(config, 'force_label_by_filename', False), config)
 if not param_values or getattr(config, 'force_label_by_filename', False):
     param_key, param_values = config.param_in_filename, annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
 assert param_values, 'aligned images, but could not extract a scanned parameter from their header nor names'
@@ -183,15 +191,13 @@ crop_vert, crop_horiz = pnip.auto_crop_black_borders(composite_output, return_in
 ## Export individual channels, 
 igamma = 1 / getattr(config, 'gamma', 1.0) 
 
-def pale(color): # average R,G,B values with white - for better readability of colored text
-    return np.mean([color, pnip.white], axis=0)
-
 for n, ch_dict, color, param_value in zip(range(len(channel_outputs)), channel_outputs, used_colors, param_values): 
-    appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [pale(color), param_value]]
+    appendix_line = [[.6, 'Single channel for '], [pnip.white, param_key+' = '], [pnip.pale(color), param_value]]
     ch_dict['im'] = annotate_image.add_databar_XL30(ch_dict['im'][crop_vert,crop_horiz,:]**igamma, 
             ch_dict['imname'], 
             ch_dict['header'], 
             appendix_lines=[appendix_line],
+            auto_label_CL_images=False
             #downscaletwice=getattr(config, 'force_downsample', False)
             ) # -> "Single channel for λ(nm) = 123"
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'.png')), ch_dict['im'])
@@ -204,29 +210,24 @@ for n, ch_dict in enumerate(extra_outputs):
             )
     imageio.imsave(str(Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
 
+composite_output /= np.max(composite_output) # normalize all channels
 
-## Generate 5th line in the databar for all-channel composite images
+## Prepare colored 5th line in the databar for all-channel composite images
 summary_ih = channel_outputs[0]['header']     # (take the header of the first file, assuming other have their headers identical)
 dbar_appendix = [[[0.6, 'Color by '], [pnip.white, param_key+': ' ] ]]
-print(used_colors, pnip.white)
 for color, param_value in zip(used_colors, param_values): 
-    dbar_appendix[0].append([pale(color),' '+param_value]) ## append to 0th line of the appending
+    dbar_appendix[0].append([pnip.pale(color),' '+param_value]) ## append to 0th line of the appending
 
-composite_output /= np.max(composite_output) # normalize all channels
-imageio.imsave(
-        str(Path(channel_outputs[0]['imname']).parent / ('composite_saturate__.png')), 
-        annotate_image.add_databar_XL30(
-            pnip.saturate(
-                composite_output, 
-                saturation_enhance=config.saturation_enhance)[crop_vert,crop_horiz,:]**igamma, 
-            channel_outputs[0]['imname'], 
-            summary_ih, appendix_lines=dbar_appendix, 
+composite_output_sat = pnip.saturate(composite_output, saturation_enhance=config.saturation_enhance)
+for output_image, output_imname in [(composite_output, 'composite'), (composite_output_sat, 'composite_saturate')]:
+    imageio.imsave(
+            str(Path(channel_outputs[0]['imname']).parent / (output_imname + "_" + channel_outputs[0]['imname'].rsplit('.',1)[0] + ".png")), 
+            annotate_image.add_databar_XL30(
+                output_image[crop_vert,crop_horiz,:]**igamma, 
+                channel_outputs[0]['imname'], 
+                summary_ih, 
+                appendix_lines=dbar_appendix, 
+                auto_label_CL_images=False
+                )
             )
-        )
-imageio.imsave(
-        str(Path(channel_outputs[0]['imname']).parent / 'composite__.png'), 
-        annotate_image.add_databar_XL30(
-            composite_output[crop_vert,crop_horiz,:]**igamma, 
-            channel_outputs[0]['imname'],
-            summary_ih, appendix_lines=dbar_appendix)
-        )
+
