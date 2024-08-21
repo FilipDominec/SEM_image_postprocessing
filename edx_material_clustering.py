@@ -24,7 +24,7 @@ License: BSD 3 clause
 # STATIC SETTINGS
 n_colors = 4
 
-SMOOTHING_PX = 2.       # higher value -> less jagged material regions, but 
+SMOOTHING_PX = 1.       # higher value -> less jagged material regions, but 
                         # worse accuracy of EDX regions 
 
 DENORM_EXP   =  .2      # partial de-normalization: Philips EDX saves images as 
@@ -46,7 +46,7 @@ FORCE_SHIFT = None      # if not set, it is auto-determined by image matching
 #FORCE_SHIFT = [0,0]    # positive values = SE underlayer moves towards top left corner
 #FORCE_SHIFT = [30,40]  # positive values = SE underlayer moves towards top left corner
 
-#note = "_2" # arbitrary output file note
+note = "_" # arbitrary output file note
 
 #print(__doc__)
 import numpy as np

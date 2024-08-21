@@ -260,7 +260,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
             size_str), x=xpos, y=dbartop+ch*1, typecase_dict=typecase_dict, color=1)
 
         ## Print the second couple of rows in the databar
-        im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
+        im = pnip.put_text(im, '{:<13} {:<13} {:<11}'.format(
             'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, typecase_dict=typecase_dict, color=.6)
         detname = detectors.get(ih['lDetName'],'')
         print(detname)

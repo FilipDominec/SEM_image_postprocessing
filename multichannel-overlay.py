@@ -47,16 +47,16 @@ import annotate_image
 
 
 
-## If no config file found, copy the default one (from the script's own directory)
+## If no config file found, copy the default one (from the script's own directory) 
 import pathlib, sys
-config_file_name = 'config.txt'
-default_config_file_name = 'default_config.txt'
+config_file_name = 'config.txt' # current confing in current working directory (for each project separately)
+        # TODO should rather point to pathlib.Path(rmage_names[1]).resolve().parent/
+default_config_file_path = pathlib.Path(__file__).resolve().parent/'default_config.txt' # defaults in script's dir
 if not pathlib.Path(config_file_name).is_file():
-    print(f'Creating {config_file_name} as a copy from {default_config_file_name}')
+    print(f'Creating {config_file_name} as a copy from {default_config_file_path}')
     with open(config_file_name, 'w') as config_file:
         config_file.write('input_files = ' + ' '.join(sys.argv[1:]))
-        for line in (pathlib.Path(__file__).resolve().parent/default_config_file_name).read_text():
-            config_file.write(line)
+        for line in default_config_file_path.read_text(): config_file.write(line)
 
 class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on pypi
     def __init__(self, config_file, splitter='=', commenter='#'): 
@@ -72,8 +72,8 @@ class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on p
             except ValueError:
                 print(f"Error parsing config file {config_file}, line {n}: '{line}'")
 
-
 config = MyConfig(config_file=config_file_name)
+
 
 def is_extra(imname): 
     return (imname[0] == config.extra_img_label 
