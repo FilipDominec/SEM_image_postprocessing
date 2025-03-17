@@ -31,7 +31,7 @@ TODOs:
 
 try:
     from IPython import get_ipython
-    get_ipython().magic('reset -sf')
+    get_ipython().magic('reset -sf') # clean up after previous run in IPython console
 except:
     pass
 
@@ -40,7 +40,7 @@ import sys, os, time, collections, imageio
 from pathlib import Path 
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
-np.warnings.filterwarnings('ignore')
+#np.warnings.filterwarnings('ignore')
 
 import pure_numpy_image_processing as pnip
 import annotate_image
@@ -49,13 +49,25 @@ import annotate_image
 
 ## If no config file found, copy the default one (from the script's own directory) 
 import pathlib, sys
-config_file_name = 'config.txt' # current confing in current working directory (for each project separately)
+config_file_name = 'config.txt' # config in current working directory (for each project separately)
         # TODO should rather point to pathlib.Path(rmage_names[1]).resolve().parent/
 default_config_file_path = pathlib.Path(__file__).resolve().parent/'default_config.txt' # defaults in script's dir
+
+if len(sys.argv[1:]) > 1:
+    input_files = sys.argv[1:]
+else:
+    import tkinter
+    import tkinter.filedialog
+    root = tkinter.Tk() 
+    root.withdraw()
+    input_files = tkinter.filedialog.askopenfilenames(filetypes=[("Images from Philips XL30 ESEM", "*.TIF"), ("All files", "*.*"),])
+    print(input_files)
+    root.iconify()
+
 if not pathlib.Path(config_file_name).is_file():
     print(f'Creating {config_file_name} as a copy from {default_config_file_path}')
     with open(config_file_name, 'w') as config_file:
-        config_file.write('input_files = ' + ' '.join(sys.argv[1:]))
+        config_file.write('input_files = ' + ' '.join(input_files))
         for line in default_config_file_path.read_text(): config_file.write(line)
 
 class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on pypi
@@ -76,12 +88,12 @@ config = MyConfig(config_file=config_file_name)
 
 
 def is_extra(imname): 
-    return (imname[0] == config.extra_img_label 
+    return (Path(imname).stem[0] == config.extra_img_label 
             or (config.extra_img_ident.upper() in Path(imname).stem.upper())) 
 
 #for a in dir(config): print(a, getattr(config,a), type(getattr(config,a)))
 
-image_names = sys.argv[1:]  or  getattr(config, 'input_files', '').split()
+image_names = input_files  or  getattr(config, 'input_files', '').split()
 
 
 #colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
@@ -97,7 +109,7 @@ shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2
 for image_name in image_names:
     if image_name.lower() == "dummy": colors.pop(); continue
     print('Loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
-    newimg = pnip.safe_imload(Path(image_name) / '..' / Path(image_name).name.lstrip(config.extra_img_label), 
+    newimg = pnip.safe_imload(Path(image_name).parent / Path(image_name).name.lstrip(config.extra_img_label), 
             retouch=config.retouch_databar)
 
     image_header = annotate_image.analyze_header_XL30(image_name)
@@ -109,10 +121,11 @@ for image_name in image_names:
     # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
     # Blur the image accordingly to reduce pixel noise, keeping useful information.
     # (Specific for the Philips XL30 microscope.)
-    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.5 - 1.0)
+    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.3 - 1.5)
+    newimg = pnip.twopixel_despike(newimg)
     if radius > 1: 
         print("De-noising with Gaussian blur with radius", radius, "px, estimated for SEM resolution (at this magnification & spotsize)")
-        newimg = pnip.blur(newimg, radius=radius, twopixel_despike=True)
+        newimg = pnip.blur(newimg, radius=radius)
 
     newimg = pnip.anisotropic_prescale(newimg, pixel_anisotropy= getattr(config, 'pixel_anisotropy', 0.91))
 
@@ -221,7 +234,7 @@ for color, param_value in zip(used_colors, param_values):
 composite_output_sat = pnip.saturate(composite_output, saturation_enhance=config.saturation_enhance)
 for output_image, output_imname in [(composite_output, 'composite'), (composite_output_sat, 'composite_saturate')]:
     imageio.imsave(
-            str(Path(channel_outputs[0]['imname']).parent / (output_imname + "_" + channel_outputs[0]['imname'].rsplit('.',1)[0] + ".png")), 
+            str(Path(channel_outputs[0]['imname']).parent / (output_imname + "_" + Path(channel_outputs[0]['imname']).stem + ".png")), 
             annotate_image.add_databar_XL30(
                 output_image[crop_vert,crop_horiz,:]**igamma, 
                 channel_outputs[0]['imname'], 

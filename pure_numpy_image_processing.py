@@ -66,10 +66,20 @@ def auto_contrast_SEM(image, ignore_bottom_part=0.2):
     return np.clip(im * 1. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 1)
 
 
+def twopixel_despike(im):
+    def twopixel_despike_channel(ch):
+            despiked = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2)
+            last_row = ch[-1,:]
+            res = np.vstack([despiked, last_row]) # keep shape
+            print(ch.shape,  res.shape)
+            return res # vertical pixel-wise de-spiking
+    if len(np.shape(im)) == 3:      # handle channels of colour image separately
+        return np.dstack([twopixel_despike_channel(channel) for channel in im])
+    else:
+        return twopixel_despike_channel(im)
+
 def blur(im, radius, twopixel_despike=False):
     def blurring_filter(ch, **kwargs):
-        if twopixel_despike:
-            ch = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2) # vertical pixel-wise de-spiking
         return gaussian_filter(ch, **kwargs)
 
     if len(np.shape(im)) == 3:      # handle channels of colour image separately
