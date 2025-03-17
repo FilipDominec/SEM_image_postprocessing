@@ -109,7 +109,7 @@ for image_name in image_names:
     # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
     # Blur the image accordingly to reduce pixel noise, keeping useful information.
     # (Specific for the Philips XL30 microscope.)
-    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.5 - 2.0)
+    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.5 - 1.0)
     if radius > 1: 
         print("De-noising with Gaussian blur with radius", radius, "px, estimated for SEM resolution (at this magnification & spotsize)")
         newimg = pnip.blur(newimg, radius=radius, twopixel_despike=True)
