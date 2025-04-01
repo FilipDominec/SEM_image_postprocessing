@@ -85,7 +85,9 @@ def guess_blur_radius_from_spotsize_XL30(image_header):
     Blur the image accordingly to reduce pixel noise, keeping useful information.
     (Specific for the Philips XL30 microscope.)
     Note this blurring should be done after filtering the salt-and-pepper noise. """
-    return float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .3 - 1.5)
+    rad = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
+    return rad
+
 
 def blur(im, radius, twopixel_despike=False):
     def blurring_filter(ch, **kwargs):

@@ -66,9 +66,10 @@ else:
 
 if not pathlib.Path(config_file_name).is_file():
     print(f'Creating {config_file_name} as a copy from {default_config_file_path}')
+, encoding='utf-8'
     with open(config_file_name, 'w') as config_file:
         config_file.write('input_files = ' + ' '.join(input_files))
-        for line in default_config_file_path.read_text(): config_file.write(line)
+        for line in default_config_file_path.read_text('utf-8'): config_file.write(line)
 
 class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on pypi
     def __init__(self, config_file, splitter='=', commenter='#'): 
@@ -123,7 +124,6 @@ for image_name in image_names:
     # (Specific for the Philips XL30 microscope.)
     newimg = pnip.twopixel_despike(newimg)
 
-    # XX radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.3 - 1.5)
     radius = pnip.guess_blur_radius_from_spotsize_XL30(image_header)
     if radius > 1: 
         print("De-noising with Gaussian blur with radius", radius, "px, estimated for SEM resolution (at this magnification & spotsize)")

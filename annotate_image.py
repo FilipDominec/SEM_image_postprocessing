@@ -305,6 +305,7 @@ def annotate_individually(imname):
         image_header = analyze_header_XL30(imname)
 
         ## Image pre-processing - TODO should be unified between annotate_image.py and multichannel-overlay.py
+        # e.g. here should be also subtraction of min. brightness
 
         im = pnip.twopixel_despike(im)
 
@@ -330,7 +331,7 @@ def annotate_individually(imname):
             #if radius > 1: im = pnip.blur(im, radius=radius)
 
         ## Rescale image to make pixels isotropic 
-        #im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY)
+        im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY)
 
 
         im = add_databar_XL30(im, imname, image_header)
