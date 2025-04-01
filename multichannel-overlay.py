@@ -121,7 +121,6 @@ for image_name in image_names:
     # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
     # Blur the image accordingly to reduce pixel noise, keeping useful information.
     # (Specific for the Philips XL30 microscope.)
-
     newimg = pnip.twopixel_despike(newimg)
 
     # XX radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.3 - 1.5)
