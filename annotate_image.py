@@ -1,6 +1,12 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
 
+try:
+    from IPython import get_ipython
+    get_ipython().magic('reset -sf') # clean up after previous run in IPython console
+except:
+    pass
+
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000
