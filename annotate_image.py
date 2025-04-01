@@ -46,7 +46,7 @@ def analyze_header_XL30(imname, allow_underscore_alias=True):
     try:
         with open(imname, encoding = "ISO-8859-1") as of: 
             # TODO seek for [DatabarData] first, then count the 194 lines!
-            ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+            image_header = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
     except:
         print('Warning: image {:} does not contain readable SEM metadata'.format(imname))
         if not allow_underscore_alias: 
@@ -55,11 +55,11 @@ def analyze_header_XL30(imname, allow_underscore_alias=True):
             print('Trying to load metadata from ', pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name))
             try: 
                 with open(str(pathlib.Path(imname).parent / ('_'+pathlib.Path(imname).name)), encoding = "ISO-8859-1") as of: 
-                    ih = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
-                    #ih['lDetName'] = '3' ## optional hack for detector override
+                    image_header = dict(l.strip().split(' = ') for l in of.read().split('\n')[:194] if '=' in l)
+                    #image_header['lDetName'] = '3' ## optional hack for detector override
             except FileNotFoundError: 
                 return {} ## empty dict 
-    return ih
+    return image_header
 
 
 
@@ -113,7 +113,7 @@ def extract_stringpart_that_differs(str_list):  # FIXME unused here?
     return None # i.e. all strings are the same?
 
 
-def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], appendix_bars=[], 
+def add_databar_XL30(im, imname, image_header, extra_color_list=None, appendix_lines=[], appendix_bars=[], 
         auto_label_CL_images=True, convert_to_int8=True):
     """
     Input:
@@ -219,7 +219,7 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     typecase_dict, ch, cw = pnip.text_initialize(typecase_rel_path='typecase.png')
     typecase_dict2, ch2, cw2 = pnip.text_initialize(typecase_rel_path='typecase2.png')
 
-    if not ih or detectors.get(ih['lDetName'],'') not in DISABLE_AUTOCONTRAST_FOR:  
+    if not image_header or detectors.get(image_header['lDetName'],'') not in DISABLE_AUTOCONTRAST_FOR:  
         im = pnip.auto_contrast_SEM(im, ignore_bottom_part=0)
 
     ## Put the logo & web on the image
@@ -229,9 +229,9 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
     xpos = logo_im.shape[1]+10 if im.shape[1]>logo_im.shape[1]+cw*55 else 0
     if xpos > 0: im = pnip.put_text(im, 'movpe.fzu.cz', x=8, y=dbartop+ch*3, typecase_dict=typecase_dict, color=.6)
 
-    if ih: 
+    if image_header: 
         ## Preprocess the parameters
-        size_x = UNITY_MAGNIF_XDIM / float(ih['Magnification'])  
+        size_x = UNITY_MAGNIF_XDIM / float(image_header['Magnification'])  
         size_y = size_x / im.shape[1] * im.shape[0]  / PIXEL_ANISOTROPY
         if size_x > 1000: size_str = '{:<4f}'.format(size_x/1000)[:4] + '×{:<4f}'.format(size_y/1000)[:4] + ' mm'
         elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
@@ -252,20 +252,20 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
         scale_width = int(scale_bar/size_x*im.shape[1])
         im = pnip.put_scale(im, xpos+cw*50 - scale_width//2, dbartop+ch*2, ch, scale_width)
         im = pnip.put_text(im, '{:<6.0f} {:<6.1f} {:<6.2f} {:<6} {:<13}'.format(
-            float(ih['flAccV']), float(ih['flSpot']), float(ih['flWD']), 
-            '{:<.0f}'.format(float(ih['Magnification']))+'×', 
+            float(image_header['flAccV']), float(image_header['flSpot']), float(image_header['flWD']), 
+            '{:<.0f}'.format(float(image_header['Magnification']))+'×', 
             size_str), x=xpos, y=dbartop+ch*1, typecase_dict=typecase_dict, color=1)
 
         ## Print the second couple of rows in the databar
         im = pnip.put_text(im, '{:<13} {:<13} {:<11}'.format(
             'Detector', 'Made', 'Sample name'), x=xpos, y=dbartop+ch*2, typecase_dict=typecase_dict, color=.6)
-        detname = detectors.get(ih['lDetName'],'')
+        detname = detectors.get(image_header['lDetName'],'')
         #print(detname)
         if auto_label_CL_images and detname == 'CL': # 
             try: 
                 # Note: by default the channels represent wavelength from 3rd position in the name, but 
                 # you can manually choose also p_kV for acc. voltage
-                p_kV, p_mag, p_wl = split_string_alpha_numeric(imname)[:3]
+                p_kV, p_mag, p_wl = split_string_alpha_numeric(pathlib.Path(imname).stem)[:3]
                 detname += ' ~'+p_wl+'nm'
             except:
                 pass
@@ -294,44 +294,40 @@ def add_databar_XL30(im, imname, ih, extra_color_list=None, appendix_lines=[], a
 ## Load images
 def annotate_individually(imname):
         print(f'Annotating {imname}')
-        im = pnip.safe_imload(imname, retouch=True)
+        im = pnip.safe_imload(imname, retouch_databar=True)
 
-        ih = analyze_header_XL30(imname)
+        image_header = analyze_header_XL30(imname)
 
-        if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
+        ## Image pre-processing - TODO should be unified between annotate_image.py and multichannel-overlay.py
+
+        im = pnip.twopixel_despike(im)
+
+        if ((im.shape[1] > downsample_size_threshold) and (float(image_header['Magnification']) >= downsample_magn_threshold)):
             im = pnip.downscaletwice(im)  # auto-downsample high-res images
 
-        if float(ih['Magnification']) >= 9000: # auto-sharpen high-res images
-            im = pnip.unsharp_mask(im, 1, (float(ih['Magnification'])/10000)**.5)
-
-        ## Rescale image to make pixels isotropic 
-        ## Down-scale it if pixel size is far smaller than SEM resolution
-        im = pnip.anisotropic_prescale(
-                im, 
-                pixel_anisotropy=PIXEL_ANISOTROPY, 
-                )
+        if float(image_header['Magnification']) >= 9000: # auto-sharpen high-res images   TODO for SE images only! 
+            im = pnip.unsharp_mask(im, 1, (float(image_header['Magnification'])/10000)**.5)
 
         if ROTATE180: 
             im = im[::-1, ::-1]
         
-        if ((im.shape[1] > downsample_size_threshold) and (float(ih['Magnification']) >= downsample_magn_threshold)):
-            im = pnip.downscaletwice(im)
 
-        # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
-        # Blur the image accordingly to reduce pixel noise, keeping useful information.
-        # (Specific for the Philips XL30 microscope.)
-        radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2.5)
+        radius = pnip.guess_blur_radius_from_spotsize_XL30(image_header)
         if radius > 1: 
-            if detectors.get(ih['lDetName'],'') == "CL":
+            if detectors.get(image_header['lDetName'],'') == "CL" or 1:
                 im = pnip.blur(im, radius=radius, twopixel_despike=True)
+                pass
             else:
                 im = pnip.unsharp_mask(im, weight=1, radius=radius)
-        #if not ih or detectors.get(ih['lDetName'],'') in ("CL"):  
-            #radius = float(ih['Magnification'])/5000   *  2**(float(ih['flSpot']) * .5 - 2)
+        #if not image_header or detectors.get(image_header['lDetName'],'') in ("CL"):  
+            #radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
             #if radius > 1: im = pnip.blur(im, radius=radius)
 
+        ## Rescale image to make pixels isotropic 
+        #im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY)
 
-        im = add_databar_XL30(im, imname, ih)
+
+        im = add_databar_XL30(im, imname, image_header)
 
         try: ## Export image
             outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')

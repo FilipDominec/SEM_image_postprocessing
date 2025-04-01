@@ -12,7 +12,6 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
 FIXME: sometimes monochrome images are returned as just 2-D arrays
 
 TODO: check if there is no reasonable alternative, then put all functions from this module into a class
-TODO: user-friendly consistency: no in-place changes of images 
 TODO: make this compatible with https://scipy-lectures.org/advanced/image_processing/ and propose partial merge
 
 """
@@ -38,7 +37,7 @@ def load_Philips30XL_BMP(fname):
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
 
-def safe_imload(imname, retouch=False):
+def safe_imload(imname, retouch_databar=False):
     """
     Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Philips30XL EDX)
 
@@ -51,7 +50,7 @@ def safe_imload(imname, retouch=False):
     im = im/255 if np.max(im)<256 else im/65535   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
-    if retouch:
+    if retouch_databar:
         for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)): # add  (-2,1),(2,1),  for 2px-wide retouch
             mask = (im==np.max(im))
             im[mask] = np.roll(im, shift, axis)[mask]
@@ -67,6 +66,8 @@ def auto_contrast_SEM(image, ignore_bottom_part=0.2):
 
 
 def twopixel_despike(im):
+    """ Removes "salt" noise of near white pixels in the image. This is to be applied before 
+    any other blurring. """
     def twopixel_despike_channel(ch):
             despiked = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2)
             last_row = ch[-1,:]
@@ -77,6 +78,14 @@ def twopixel_despike(im):
         return np.dstack([twopixel_despike_channel(channel) for channel in im])
     else:
         return twopixel_despike_channel(im)
+
+
+def guess_blur_radius_from_spotsize_XL30(image_header):
+    """ High-resolution images with high spotsize value are inherently blurred by electron beam size.
+    Blur the image accordingly to reduce pixel noise, keeping useful information.
+    (Specific for the Philips XL30 microscope.)
+    Note this blurring should be done after filtering the salt-and-pepper noise. """
+    return float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .3 - 1.5)
 
 def blur(im, radius, twopixel_despike=False):
     def blurring_filter(ch, **kwargs):

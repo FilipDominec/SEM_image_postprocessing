@@ -110,20 +110,22 @@ for image_name in image_names:
     if image_name.lower() == "dummy": colors.pop(); continue
     print('Loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
     newimg = pnip.safe_imload(Path(image_name).parent / Path(image_name).name.lstrip(config.extra_img_label), 
-            retouch=config.retouch_databar)
+            retouch_databar=config.retouch_databar)
 
     image_header = annotate_image.analyze_header_XL30(image_name)
     #if 'M05' in image_name: image_header={'flAccV':'5000','lDetName':'2','Magnification':'5000','flSpot':'3', 'flWD':'8.3'} ## Manual fix
 
 
-    ## Image pre-processing
+    ## Image pre-processing - TODO should be unified between annotate_image.py and multichannel-overlay.py
 
     # High-resolution images with high-spotsize are inherently blurred by electrn beam size.
     # Blur the image accordingly to reduce pixel noise, keeping useful information.
     # (Specific for the Philips XL30 microscope.)
-    radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.3 - 1.5)
-    print("radius", radius)
+
     newimg = pnip.twopixel_despike(newimg)
+
+    # XX radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot'])*.3 - 1.5)
+    radius = pnip.guess_blur_radius_from_spotsize_XL30(image_header)
     if radius > 1: 
         print("De-noising with Gaussian blur with radius", radius, "px, estimated for SEM resolution (at this magnification & spotsize)")
         newimg = pnip.blur(newimg, radius=radius)
