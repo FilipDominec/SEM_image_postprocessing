@@ -26,6 +26,8 @@ TODOs:
     * is there some colour mismatch between affine-tr and normal operation?
     * interactive GUI D&D application
     * test on windows
+    
+    * should also analyze covariance of elements (c.f. p/170816-2dimghistogram_covariance) 
 """
 
 
@@ -46,6 +48,8 @@ from scipy.ndimage.filters import gaussian_filter
 import pathlib
 from pathlib import Path 
 import sys
+import tkinter
+from tkinter import filedialog
 #np.warnings.filterwarnings('ignore')
 
 import pure_numpy_image_processing as pnip
@@ -53,6 +57,7 @@ import annotate_image
 
 
 class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on pypi
+    # TODO switch to the GUIConfig class being developed
     def __init__(self, config_file, splitter='=', commenter='#'): 
         from ast import literal_eval
         for n, line in enumerate(pathlib.Path(config_file).read_text().split('\n')):
@@ -67,6 +72,11 @@ class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on p
                 print(f"Error parsing config file {config_file}, line {n}: '{line}'")
 
 
+def is_extra(imname, config):  
+    """ extra files are typically SEM images to be aligned & exported, but not to be added in the cathodoluminescence stack """
+    return (Path(imname).stem[0] == config.extra_img_label 
+            or (config.extra_img_ident.upper() in Path(imname).stem.upper())) 
+
 
 def process_images():
     ## If no config file found, copy the default one (from the script's own directory) 
@@ -74,40 +84,55 @@ def process_images():
             # might rather point to pathlib.Path(image_names[0]).resolve().parent/
     default_config_file_path = pathlib.Path(__file__).resolve().parent/'default_config.txt' # defaults in script's dir
 
+    ## TODO TEST THE LOGIC OF OPENING FILES / CONFIG
+
+    # Get at least one input file name - either by command line arguments, or by graphical dialog
+    # This/these may be images or a previous config file
     if len(sys.argv[1:]) > 1:
         input_files = sys.argv[1:]
+        print('Input file names given', input_files)
     else:
-        import tkinter
-        import tkinter.filedialog
+        # Running Tkinter file dialog without main app is a bit tricky because of dialog window losing focus 
+        # TODO check if this makes no trouble with Windows - the background window wouldn't close...
+        # https://stackoverflow.com/questions/30678508/how-to-use-tkinter-filedialog-without-a-window 
+        print('No input arguments provided, will ask for input image files (or for a config.txt containing file names from previous run)')
         root = tkinter.Tk() 
-        root.withdraw() # TODO check if this makes no trouble with Windows - the background window wouldn't close...
-        input_files = tkinter.filedialog.askopenfilenames(filetypes=[("Images from Philips XL30 ESEM", "*.TIF"), ("All files", "*.*"),])
-        print(input_files)
-        root.iconify() # TODO check too if this makes no trouble with Windows
+        #root.withdraw() 
+        root.iconify() 
+        input_files = filedialog.askopenfilenames(filetypes=[("Images from Philips XL30 ESEM", "*.TIF"), ("Previous processing configuration", "*.txt"), ("All files", "*.*"),])
+        root.iconify()
+        root.destroy()
 
-    if not pathlib.Path(config_file_name).is_file():
-        print(f'Creating {config_file_name} as a copy from {default_config_file_path}')
-        
-        with open(config_file_name, 'w') as config_file:
-            config_file.write('input_files = ' + ' '.join(input_files))
-            for line in default_config_file_path.read_text('utf-8'): 
-                config_file.write(line)
+    if Path(input_files[0]).name == 'config.txt':
+        # TODO load the files config_file_path
+        config_file_path = Path(input_files[0])
+        input_files = input_files[1:]
+    else:
+        # if config.txt not provided explicitly, get it or generate a new one in the directory of first image file
+        config_file_path = Path(input_files[0]).parent / config_file_name
+        if not config_file_path.is_file(): # make a fresh config file
+            print(f'Creating {config_file_name} as a copy from {default_config_file_path}; storing current input files choice:', input_files)
+            with open(config_file_path, 'w') as config_file:
+                config_file.write('input_files = ' + ' '.join(input_files))
+                for line in default_config_file_path.read_text('utf-8'): 
+                    config_file.write(line)
 
-    config = MyConfig(config_file=config_file_name)
+    config = MyConfig(config_file=config_file_path)
 
+    print('Using configuration options:')
+    for a in dir(config): print(a, getattr(config,a), type(getattr(config,a)))
 
-    def is_extra(imname): 
-        return (Path(imname).stem[0] == config.extra_img_label 
-                or (config.extra_img_ident.upper() in Path(imname).stem.upper())) 
-
-    #for a in dir(config): print(a, getattr(config,a), type(getattr(config,a)))
-
-    image_names = input_files  or  getattr(config, 'input_files', '').split()
+    if input_files:
+        print('Following image files were selected by user', input_files)
+        image_names = input_files  
+    else:  
+        image_names = getattr(config, 'input_files', '').split()
+        print('No image files were selected by user, using the existing ones in', config_file_path, ': \n\n', image_names)
 
     #colors = matplotlib.cm.gist_rainbow_r(np.linspace(0.25, 1, len([s for s in image_names if not is_extra(s)])))   ## Generate a nice rainbow scale for all non-extra images
     #colors = [c*np.array([.8, .7, .9, 1]) for c in colors[::-1]] ## suppress green channel
     #colors = pnip.rgb_palette(len([s for s in image_names if not is_extra(s)])
-    n_color_channels = len([s for s in image_names if not is_extra(s)])
+    n_color_channels = len([s for s in image_names if not is_extra(s, config)])
     gn = getattr(config, 'green_channel_factor', 0.8) if n_color_channels>2 else 0.8
     colors = [pnip.hsv_to_rgb(h=h, green_norm=gn) for  h in 
             np.linspace(1+1/6 if n_color_channels==2 else 1, 1+2/3, n_color_channels)] 
@@ -116,7 +141,7 @@ def process_images():
     shiftvec_sum, shiftvec_new, trmatrix_sum, trmatrix_new = np.zeros(2), np.zeros(2), np.eye(2), np.eye(2)   ## Initialize affine transform to identity, and image shift to zero
     for image_name in image_names:
         if image_name.lower() == "dummy": colors.pop(); continue
-        print('Loading', image_name, 'detected as "extra image"' if is_extra(image_name) else ''); 
+        print('Loading', image_name, 'detected as "extra image"' if is_extra(image_name, config) else ''); 
         newimg = pnip.safe_imload(Path(image_name).parent / Path(image_name).name.lstrip(config.extra_img_label), 
                 retouch_databar=config.retouch_databar)
 
@@ -166,19 +191,19 @@ def process_images():
                 shiftvec_new, shiftvec_sum))
 
         newimg_processed = pnip.my_affine_tr(        ## Process the new image: sharpening, affine transform, and padding...
-                np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name) else config.unsharp_weight), radius=config.unsharp_radius), 
+                np.pad(pnip.unsharp_mask(newimg, weight=(0 if is_extra(image_name, config) else config.unsharp_weight), radius=config.unsharp_radius), 
                         pad_width=max_shift, mode='constant'), trmatrix_sum) 
         
                 
         ## Color & brightness adjustment
-        if is_extra(image_name): 
+        if is_extra(image_name, config): 
             color_tint = pnip.white 
         else:
             color_tint = colors.pop()
             used_colors.append(color_tint) 
 
         img_norm =  np.max(newimg_crop)**(1-config.max_brightness_norm) * (np.mean(newimg_crop)*6)**config.mean_brightness_norm
-        if not is_extra(image_name):            ## ... then shifting and adding the image to the composite canvas
+        if not is_extra(image_name, config):            ## ... then shifting and adding the image to the composite canvas
             if 'composite_output' not in locals(): 
                 composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
             pnip.paste_overlay(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm)
@@ -186,16 +211,16 @@ def process_images():
         ## Export the image individually (either as colored channel, or as an extra image)
         single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
         pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm) 
-        target_output = extra_outputs if is_extra(image_name) else channel_outputs
+        target_output = extra_outputs if is_extra(image_name, config) else channel_outputs
         target_output.append({'im':single_output, 'imname':image_name, 'header':image_header})
 
         if not config.consecutive_alignment:   ## optionally, search alignment against the very first image
             shiftvec_sum, trmatrix_sum = np.zeros(2), np.eye(2)
-        elif is_extra(image_name):      ## undo alignment changes (since extra imgs never affect alignment of further images)
+        elif is_extra(image_name, config):      ## undo alignment changes (since extra imgs never affect alignment of further images)
             shiftvec_sum -= shiftvec_new
             trmatrix_sum -= (trmatrix_new - np.eye(2))*config.trmatrix_factor
 
-        if 'refimg' not in locals() or (config.consecutive_alignment and not is_extra(image_name)): ## store the image as a reference
+        if 'refimg' not in locals() or (config.consecutive_alignment and not is_extra(image_name, config)): ## store the image as a reference
             refimg, refimg_crop = newimg, newimg[:-int(newimg.shape[0]*config.databar_pct):config.decim, ::config.decim]*1.0
 
     ## Auto-generate naming of the individual channels
@@ -256,4 +281,4 @@ try:
 except: 
     import traceback
     print(traceback.format_exc())
-    input('\nPress the Enter key to exit.') 
+    input('\nPlease consider reporting this error message to the author. Press the Enter key to exit.') 
