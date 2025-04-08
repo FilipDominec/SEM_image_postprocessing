@@ -10,26 +10,38 @@ except:
 # Static user settings
 OVERWRITE_ALLOWED = True
 downsample_size_threshold = 1000
-downsample_magn_threshold = 501   # reasonably downsample (=de-noise) super-hires images
+downsample_magn_threshold = 501   # reasonably downsample (& de-noise) super-hires images
 #downsample_magn_threshold = 1      # would downsample all "hi-res" TIFF images
 PIXEL_ANISOTROPY = .91
 UNITY_MAGNIF_XDIM = 117500./1.03
 ROTATE180 = 0 # False
 
-#DISABLE_AUTOCONTRAST_FOR =  ('CL',)
-DISABLE_AUTOCONTRAST_FOR =  () # contrast stretch even for CL images (if individual, not a colored batch)
+# no contrast stretch even for individual CL images (black has to be precalibrated manually):
+DISABLE_AUTOCONTRAST_FOR =  ('CL',) 
+
+detectors = {'0': 'SE', '2':'Aux', '3':'CL'}    # (for Philips XL30 microscope-dependent)
 
 
 
+import sys
+import os
+import time
+import collections
+import pathlib
+import sys
+import traceback
+sys.excepthook = lambda t,v,tb: input(''.join(traceback.format_exception(t, v, tb)) + 
+        '\nPress Enter to continue. Please consider reporting this to the developers.')
 
+import imageio
 import numpy as np
-import sys, time, imageio, warnings, pathlib
-warnings.filterwarnings("ignore")
 import pure_numpy_image_processing as pnip
+import tkinter
+from tkinter import filedialog, messagebox
+import traceback
+import warnings
+warnings.filterwarnings("ignore")
 
-
-## (microscope-dependent settings)
-detectors = {'0': 'SE', '2':'Aux', '3':'CL'}
 
 
 def analyze_header_XL30(imname, allow_underscore_alias=True):
@@ -336,44 +348,39 @@ def annotate_individually(imname):
 
         im = add_databar_XL30(im, imname, image_header)
 
-        try: ## Export image
-            outname = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
-            if not pathlib.Path(outname).is_file() or OVERWRITE_ALLOWED: 
-                imageio.imsave(str(outname), im)
-                # try metadata with PIL? https://stackoverflow.com/questions/58399070/how-do-i-save-custom-information-to-a-png-image-file-in-python
-                print(f"OK: Processed {imname} and exported to {outname}.")
-            else: print(f"Warning: file {imname} exists, and overwriting was not allowed. Not saving.")
-        except Exception as e: 
-            import traceback
-            print('Error: image {:} skipped: \n\n'.format(outname), e,traceback.print_exc() ), traceback.print_exc()
+        ## Export image
+        outpath = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
+        if not outpath.is_file() or OVERWRITE_ALLOWED: 
+            imageio.imsave(str(outpath), im)
+            # try metadata with PIL? https://stackoverflow.com/questions/58399070/how-do-i-save-custom-information-to-a-png-image-file-in-python
+            print(f"OK: Processed {imname} and exported to {outpath}.")
+        else: 
+            print(f"Warning: file {imname} exists, and overwriting was not allowed. Not saving.")
             
 if __name__ == '__main__':
-    #imnames = sys.argv[1:]
 
+    ## Get the file names (as command line arguments, or from a dialog) and process each
     if len(sys.argv) >= 2:
         imnames = sys.argv[1:]
     else:
-        import tkinter
         root = tkinter.Tk() 
         root.withdraw()
-        import tkinter.filedialog
-        imnames = tkinter.filedialog.askopenfilenames(filetypes=[("TIF images from Philips XL30 SEM", "*.tif *.TIF"), ("All files", "*.*"),])
+        imnames = filedialog.askopenfilenames(
+                filetypes=[("TIF images from Philips XL30 SEM", "*.tif *.TIF"), ("All files", "*.*"),],
+                title='Select image file(s) to be annotated individually')
         print("imnames", imnames)
         #else: print("Please specify one or more TIF files to be processed individually")
 
-    # TODO ask if TIF images are to be moved into orig/ subfolder
     for imname in imnames:
         annotate_individually(imname)
 
-    from tkinter import messagebox
+    # Finally ask if the original images are to be moved into orig/ subfolder
     if len(sys.argv)<2 and \
             messagebox.askquestion("Images converted", "Do you want to move the original TIF files into an 'orig' subfolder? ") == 'yes':
         for imname in imnames:
-            from pathlib import Path
-            src = Path(imname)
+            src = pathlib.Path(imname)
             dst = src.parent/'orig'/src.name
             dst.parent.mkdir(parents=True, exist_ok=True)
             src.rename(dst)
             print(f'Cleanup of TIF sources: moving {src} to {dst}')
-
 

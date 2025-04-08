@@ -42,15 +42,18 @@ import sys
 import os
 import time
 import collections
+import pathlib
+import sys
+import traceback
+sys.excepthook = lambda t,v,tb: input(''.join(traceback.format_exception(t, v, tb)) + 
+        '\nPress Enter to continue. Please consider reporting this to the developers.')
+
 import imageio
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
-import pathlib
-from pathlib import Path 
-import sys
 import tkinter
 from tkinter import filedialog
-#np.warnings.filterwarnings('ignore')
+np.warnings.filterwarnings('ignore')
 
 import pure_numpy_image_processing as pnip
 import annotate_image
@@ -74,8 +77,8 @@ class MyConfig(object):  ## configparser is lame & ConfigIt/localconfig are on p
 
 def is_extra(imname, config):  
     """ extra files are typically SEM images to be aligned & exported, but not to be added in the cathodoluminescence stack """
-    return (Path(imname).stem[0] == config.extra_img_label 
-            or (config.extra_img_ident.upper() in Path(imname).stem.upper())) 
+    return (pathlib.Path(imname).stem[0] == config.extra_img_label 
+            or (config.extra_img_ident.upper() in pathlib.Path(imname).stem.upper())) 
 
 
 def process_images():
@@ -103,13 +106,13 @@ def process_images():
         root.iconify()
         root.destroy()
 
-    if Path(input_files[0]).name == 'config.txt':
+    if pathlib.Path(input_files[0]).name == 'config.txt':
         # TODO load the files config_file_path
-        config_file_path = Path(input_files[0])
+        config_file_path = pathlib.Path(input_files[0])
         input_files = input_files[1:]
     else:
         # if config.txt not provided explicitly, get it or generate a new one in the directory of first image file
-        config_file_path = Path(input_files[0]).parent / config_file_name
+        config_file_path = pathlib.Path(input_files[0]).parent / config_file_name
         if not config_file_path.is_file(): # make a fresh config file
             print(f'Creating {config_file_name} as a copy from {default_config_file_path}; storing current input files choice:', input_files)
             with open(config_file_path, 'w') as config_file:
@@ -142,7 +145,7 @@ def process_images():
     for image_name in image_names:
         if image_name.lower() == "dummy": colors.pop(); continue
         print('Loading', image_name, 'detected as "extra image"' if is_extra(image_name, config) else ''); 
-        newimg = pnip.safe_imload(Path(image_name).parent / Path(image_name).name.lstrip(config.extra_img_label), 
+        newimg = pnip.safe_imload(pathlib.Path(image_name).parent / pathlib.Path(image_name).name.lstrip(config.extra_img_label), 
                 retouch_databar=config.retouch_databar)
 
         image_header = annotate_image.analyze_header_XL30(image_name)
@@ -246,7 +249,7 @@ def process_images():
                 auto_label_CL_images=False
                 #downscaletwice=getattr(config, 'force_downsample', False)
                 ) 
-        imageio.imsave(str(Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + Path(ch_dict['imname']).stem +'.png')), ch_dict['im'])
+        imageio.imsave(str(pathlib.Path(ch_dict['imname']).parent / ('channel{:02d}_'.format(n) + pathlib.Path(ch_dict['imname']).stem +'.png')), ch_dict['im'])
 
     for n, ch_dict in enumerate(extra_outputs): 
         ch_dict['im'] = annotate_image.add_databar_XL30(
@@ -254,7 +257,7 @@ def process_images():
                 appendix_lines=[[]],
                 #downscaletwice=getattr(config, 'force_downsample', False)
                 )
-        imageio.imsave(str(Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
+        imageio.imsave(str(pathlib.Path(ch_dict['imname']).parent / ('extra{:02d}_'.format(n) + pathlib.Path(ch_dict['imname']).stem.lstrip('+')+ '.png')), ch_dict['im'])
 
 
     ## Prepare colored 5th line in the databar for all-channel composite images
@@ -266,7 +269,7 @@ def process_images():
     composite_output_sat = pnip.saturate(composite_output, saturation_enhance=config.saturation_enhance)
     for output_image, output_imname in [(composite_output, 'composite'), (composite_output_sat, 'composite_saturate')]:
         imageio.imsave(
-                str(Path(channel_outputs[0]['imname']).parent / (output_imname + "_" + Path(channel_outputs[0]['imname']).stem + ".png")), 
+                str(pathlib.Path(channel_outputs[0]['imname']).parent / (output_imname + "_" + pathlib.Path(channel_outputs[0]['imname']).stem + ".png")), 
                 annotate_image.add_databar_XL30(
                     output_image[crop_vert,crop_horiz,:]**(1/getattr(config, 'gamma', 1.0)), 
                     channel_outputs[0]['imname'], 
@@ -276,9 +279,6 @@ def process_images():
                     )
                 )
 
-try:
+if __name__ == '__main__':
+        
     process_images()
-except: 
-    import traceback
-    print(traceback.format_exc())
-    input('\nPlease consider reporting this error message to the author. Press the Enter key to exit.') 
