@@ -53,7 +53,8 @@ import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 import tkinter
 from tkinter import filedialog
-np.warnings.filterwarnings('ignore')
+import warnings
+warnings.filterwarnings('ignore')
 
 import pure_numpy_image_processing as pnip
 import annotate_image
@@ -122,8 +123,8 @@ def process_images():
 
     config = MyConfig(config_file=config_file_path)
 
-    print('Using configuration options:')
-    for a in dir(config): print(a, getattr(config,a), type(getattr(config,a)))
+    #print('Using configuration options:')
+    #for k,v in config.__dict__.items(): print(k,v,type(v))
 
     if input_files:
         print('Following image files were selected by user', input_files)
@@ -209,11 +210,12 @@ def process_images():
         if not is_extra(image_name, config):            ## ... then shifting and adding the image to the composite canvas
             if 'composite_output' not in locals(): 
                 composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-            pnip.paste_overlay(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm)
+            print('XXXXXXXXXXXXXXXXXXXXXXXXXX', composite_output, [newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3], np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3]))
+            pnip.paste_overlay_inplace(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm)
 
         ## Export the image individually (either as colored channel, or as an extra image)
         single_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-        pnip.paste_overlay(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm) 
+        pnip.paste_overlay_inplace(single_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm) 
         target_output = extra_outputs if is_extra(image_name, config) else channel_outputs
         target_output.append({'im':single_output, 'imname':image_name, 'header':image_header})
 

@@ -17,7 +17,8 @@ UNITY_MAGNIF_XDIM = 117500./1.03
 ROTATE180 = 0 # False
 
 # no contrast stretch even for individual CL images (black has to be precalibrated manually):
-DISABLE_AUTOCONTRAST_FOR =  ('CL',) 
+#DISABLE_AUTOCONTRAST_FOR = ['CL']
+DISABLE_AUTOCONTRAST_FOR = []
 
 detectors = {'0': 'SE', '2':'Aux', '3':'CL'}    # (for Philips XL30 microscope-dependent)
 

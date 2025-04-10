@@ -9,8 +9,10 @@ An image is represented by a simple numpy array, always having 3 dimensions. The
             width =  image width
             height = image height
             depth =  1 for monochrome image, 3 for R-G-B colour images
-FIXME: sometimes monochrome images are returned as just 2-D arrays
 
+Note this module relies also on Scipy functions.
+
+FIXME: sometimes monochrome images are returned as just 2-D arrays
 TODO: check if there is no reasonable alternative, then put all functions from this module into a class
 TODO: make this compatible with https://scipy-lectures.org/advanced/image_processing/ and propose partial merge
 
@@ -18,15 +20,19 @@ TODO: make this compatible with https://scipy-lectures.org/advanced/image_proces
 
 import imageio, pathlib
 import numpy as np
-from scipy.ndimage.filters import laplace, gaussian_filter, median_filter, minimum_filter
+
+from scipy.ndimage import laplace, gaussian_filter
 from scipy.ndimage import affine_transform, zoom
 from scipy.signal import correlate2d, convolve2d
 from scipy.optimize import differential_evolution
 
+
 # Load the input images
+
 def load_Philips30XL_BMP(fname):
     """ 
-    Experimental loading of BMPs from Philips30XL microscopes (they have an atypical format which cannot be loaded by imageio)
+
+    Loading of BMPs from Philips30XL microscopes (they have an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
     with open(fname, mode='rb') as file: # first analyze the header
@@ -57,13 +63,7 @@ def safe_imload(imname, retouch_databar=False):
     return im
 
 
-
-## Brightness & Colour adjustments
-def auto_contrast_SEM(image, ignore_bottom_part=0.2):
-    # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
-    im = image - np.min(image) 
-    return np.clip(im * 1. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 1)
-
+## Blurring, denoising and sharpening
 
 def twopixel_despike(im):
     """ Removes "salt" noise of near white pixels in the image. This is to be applied before 
@@ -72,13 +72,12 @@ def twopixel_despike(im):
             despiked = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2)
             last_row = ch[-1,:]
             res = np.vstack([despiked, last_row]) # keep shape
-            print(ch.shape,  res.shape)
+            #print(ch.shape,  res.shape)
             return res # vertical pixel-wise de-spiking
     if len(np.shape(im)) == 3:      # handle channels of colour image separately
         return np.dstack([twopixel_despike_channel(channel) for channel in im])
     else:
         return twopixel_despike_channel(im)
-
 
 def guess_blur_radius_from_spotsize_XL30(image_header):
     """ High-resolution images with high spotsize value are inherently blurred by electron beam size.
@@ -87,7 +86,6 @@ def guess_blur_radius_from_spotsize_XL30(image_header):
     Note this blurring should be done after filtering the salt-and-pepper noise. """
     rad = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
     return rad
-
 
 def blur(im, radius, twopixel_despike=False):
     def blurring_filter(ch, **kwargs):
@@ -105,15 +103,9 @@ def unsharp_mask(im, weight, radius, clip_to_max=True):
         #im = np.clip(im*(1+weight) - unsharp*weight, 0, np.sum(im)*8/im.size ) ## TODO fix color clipping?
     return im
 
-def saturate(im, saturation_enhance):
-    orig_max = np.max(im)
-    monochr = np.dstack([np.sum(im, axis=2)]*3)
-    satu = np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, orig_max) # prevent negative values / overshoots
-    return satu / np.max(satu) * orig_max ## keep peak brightness if too dim
-
-
 
 ## Geometry adjustments
+
 def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function around scipy's implementation
     troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner 
     if np.all(np.isclose(trmatrix, np.eye(2))): return im
@@ -212,35 +204,68 @@ def auto_crop_black_borders(im, return_indices_only=False):
 
 
 
-## Text/image/drawing overlay routines
+## Colors
+
+def auto_contrast_SEM(image, ignore_bottom_part=0.2):
+    # Image contrast auto-enhancement (except CL, where intensity is to be preserved)
+    im = image - np.min(image) 
+    return np.clip(im * 1. / np.max(im[:int(im.shape[0]*(1-ignore_bottom_part)),:]), 0, 1)
+
+def saturate(im, saturation_enhance):
+    orig_max = np.max(im)
+    monochr = np.dstack([np.sum(im, axis=2)]*3)
+    satu = np.clip(im*(1.+saturation_enhance) - monochr*saturation_enhance, 0, orig_max) # prevent negative values / overshoots
+    return satu / np.max(satu) * orig_max ## keep peak brightness if too dim
+
 white = [1,1,1]
 
 def pale(color): # average R,G,B values with white - for better readability of colored text
     return np.mean([color, white], axis=0)
 
+def match_wb_and_color(im1, im2): 
+    ''' Converts grayscale image 'im2' into a colourful one, and vice versa (the color mode of 'im1' being followed) '''
+    if len(im2.shape) > len(im1.shape): im2 = im2[:,:,len(im1.shape)] ## reduce channel depth if needed
+    if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*len(im1.shape))
+    return im2
 
-def paste_overlay(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_exponent=1.):
+def hsv_to_rgb(h, s=1, v=1, red_norm=.9, green_norm=.8): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
+    if s == 0.0: return v*red_norm, v*green_norm, v
+    i = int(h*6.0) # XXX assume int() truncates!
+    f = (h*6.0) - i
+    p = v*(1.0 - s)
+    q = v*(1.0 - s*f)
+    t = v*(1.0 - s*(1.0-f))
+    i = i%6
+    if i == 0: return np.array([v*red_norm, t*green_norm, p])
+    if i == 1: return np.array([q*red_norm, v*green_norm, p])
+    if i == 2: return np.array([p*red_norm, v*green_norm, t])
+    if i == 3: return np.array([p*red_norm, q*green_norm, v])
+    if i == 4: return np.array([t*red_norm, p*green_norm, v])
+    if i == 5: return np.array([v*red_norm, p*green_norm, q])
+
+def rgb_palette(n_colors, red_norm=.7, green_norm=.5): # todo stretch hue around orange-yellow-green a bit?
+    return np.array([hsv_to_rgb(i,1,1,red_norm, green_norm) for i in np.linspace(0,1-1/n_colors,n_colors)])
+
+def paste_overlay_inplace(bgimage, fgimage, shiftvec, color_tint, normalize=1, channel_exponent=1.):
     """ 
-    Image addition (keeps background image) with specified color_tint
+    Adds monochrome `fgimage` to the RGB-coloured background image with specified RGB color_tint
 
-    FIXME Modifies bgimage in place
+    For efficiency, this function modifies the bgimage in place; if this is not desired, provide this function with 
+    a bgimage.copy() instead.
     """
-    print("bgimage.shape, fgimage.shape", bgimage.shape, fgimage.shape)
-    #fgimage = np.dstack([fgimage]*3) # XXX
+    print(bgimage, fgimage)
     for channel in range(3):
         vs, hs = shiftvec.astype(int)
-        vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2)
-        hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2)
-        #if channel == 0:
-            #print('FGs, BGs, shiftvec, centrvec', fgimage.shape, bgimage.shape, vs, hs, vc, hc)
-            #print('   indices:',  [vc-vs, vc+fgimage.shape[0]-vs, hc-hs, hc+fgimage.shape[1]-hs])
-        #print('idx ..........', [vc-vs, vc+fgimage.shape[0]-vs, hc-hs,hc+fgimage.shape[1]-hs, channel])
-        aa = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
+        vc = int(bgimage.shape[0]/2 - fgimage.shape[0]/2) # vertical ..
+        hc = int(bgimage.shape[1]/2 - fgimage.shape[1]/2) # .. and horizontal centers
+
+        sub_image = bgimage[vc-vs:vc+fgimage.shape[0]-vs, 
                 hc-hs:hc+fgimage.shape[1]-hs, 
                 channel]
-        aa += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
-                #fgimage**channel_exponent*float(color[channel]) 
+        sub_image += np.clip(fgimage**channel_exponent*float(color_tint[channel])/normalize, 0, 1)
 
+
+## Text/image/drawing overlay routines
 
 def inmydir(fn): return pathlib.Path(__file__).resolve().parent/fn # finds the basename in the script's dir
 
@@ -297,41 +322,5 @@ def put_bar(im, x, y, h, xw, color=None):
     if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
     im[y+2:y+h-2, x-1:x+xw] = color
     return im
-
-
-
-
-## Auxiliary
-def match_wb_and_color(im1, im2): 
-    ''' Converts grayscale image 'im2' into a colourful one, and vice versa (the color mode of 'im1' being followed) '''
-    if len(im2.shape) > len(im1.shape): im2 = im2[:,:,len(im1.shape)] ## reduce channel depth if needed
-    if len(im2.shape) < len(im1.shape): im2 = np.dstack([im2]*len(im1.shape))
-    return im2
-
-
-def hsv_to_rgb(h, s=1, v=1, red_norm=.9, green_norm=.8): ## adapted from https://docs.python.org/2/library/colorsys.html with perceptual coeffs for red and green
-    if s == 0.0: return v*red_norm, v*green_norm, v
-    i = int(h*6.0) # XXX assume int() truncates!
-    f = (h*6.0) - i
-    p = v*(1.0 - s)
-    q = v*(1.0 - s*f)
-    t = v*(1.0 - s*(1.0-f))
-    i = i%6
-    if i == 0: return np.array([v*red_norm, t*green_norm, p])
-    if i == 1: return np.array([q*red_norm, v*green_norm, p])
-    if i == 2: return np.array([p*red_norm, v*green_norm, t])
-    if i == 3: return np.array([p*red_norm, q*green_norm, v])
-    if i == 4: return np.array([t*red_norm, p*green_norm, v])
-    if i == 5: return np.array([v*red_norm, p*green_norm, q])
-
-def rgb_palette(n_colors, red_norm=.7, green_norm=.5): # todo stretch hue around orange-yellow-green a bit?
-    return np.array([hsv_to_rgb(i,1,1,red_norm, green_norm) for i in np.linspace(0,1-1/n_colors,n_colors)])
-
-
-
-
-
-
-
 
 
