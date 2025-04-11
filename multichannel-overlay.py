@@ -123,9 +123,6 @@ def process_images():
 
     config = MyConfig(config_file=config_file_path)
 
-    #print('Using configuration options:')
-    #for k,v in config.__dict__.items(): print(k,v,type(v))
-
     if input_files:
         print('Following image files were selected by user', input_files)
         image_names = input_files  
@@ -210,7 +207,6 @@ def process_images():
         if not is_extra(image_name, config):            ## ... then shifting and adding the image to the composite canvas
             if 'composite_output' not in locals(): 
                 composite_output = np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3])
-            print('XXXXXXXXXXXXXXXXXXXXXXXXXX', composite_output, [newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3], np.zeros([newimg.shape[0]+2*image_padding, newimg.shape[1]+2*image_padding, 3]))
             pnip.paste_overlay_inplace(composite_output, newimg_processed, shiftvec_sum, color_tint, normalize=img_norm)
 
         ## Export the image individually (either as colored channel, or as an extra image)
@@ -230,8 +226,6 @@ def process_images():
 
     ## Auto-generate naming of the individual channels
     param_key, param_values = annotate_image.extract_dictkey_that_differs([co['header'] for co in channel_outputs], key_filter=['flAccV']) # 'Magnification', 'lDetName', 
-    #print(param_key, param_values)
-    #print(getattr(config, 'force_label_by_filename', False), config)
     if not param_values or getattr(config, 'force_label_by_filename', False):
         param_key, param_values = config.param_in_filename, annotate_image.extract_stringpart_that_differs([co['imname'] for co in channel_outputs])
     assert param_values, 'aligned images, but could not extract a scanned parameter from their header nor names'
