@@ -32,7 +32,7 @@ from scipy.optimize import differential_evolution
 def load_Philips30XL_BMP(fname):
     """ 
 
-    Loading of BMPs from Philips30XL microscopes (they have an atypical format which cannot be loaded by imageio)
+    Loading of BMPs from Philips30XL microscopes EDX mapping software (an atypical format which cannot be loaded by imageio)
     See https://ide.kaitai.io/ for more information on BMP header. 
     """
     with open(fname, mode='rb') as file: # first analyze the header
@@ -43,7 +43,7 @@ def load_Philips30XL_BMP(fname):
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
 
-def safe_imload(imname, retouch_databar=False):
+def safe_imload(imname, retouch_databar=False, return_whitemask=False):
     """
     Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Philips30XL EDX)
 
@@ -56,11 +56,16 @@ def safe_imload(imname, retouch_databar=False):
     im = im/255 if np.max(im)<256 else im/65535   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
+    white_mask = (im==np.max(im))
+
     if retouch_databar:
         for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)): # add  (-2,1),(2,1),  for 2px-wide retouch
             mask = (im==np.max(im))
             im[mask] = np.roll(im, shift, axis)[mask]
-    return im
+    if return_whitemask:
+        return im, white_mask
+    else:
+        return im
 
 
 ## Blurring, denoising and sharpening
@@ -84,7 +89,8 @@ def guess_blur_radius_from_spotsize_XL30(image_header):
     Blur the image accordingly to reduce pixel noise, keeping useful information.
     (Specific for the Philips XL30 microscope.)
     Note this blurring should be done after filtering the salt-and-pepper noise. """
-    rad = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
+    rad = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2.5)
+    print(f"For magnif {float(image_header['Magnification'])} and spot {float(image_header['flSpot'])} guessing blur radius {rad} px")
     return rad
 
 def blur(im, radius, twopixel_despike=False):

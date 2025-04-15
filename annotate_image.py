@@ -313,7 +313,7 @@ def add_databar_XL30(im, imname, image_header, extra_color_list=None, appendix_l
 ## Load images
 def annotate_individually(imname):
         print(f'Annotating {imname}')
-        im = pnip.safe_imload(imname, retouch_databar=True)
+        im, white_mask = pnip.safe_imload(imname, retouch_databar=False, return_whitemask=True)
 
         image_header = analyze_header_XL30(imname)
 
@@ -342,6 +342,8 @@ def annotate_individually(imname):
         #if not image_header or detectors.get(image_header['lDetName'],'') in ("CL"):  
             #radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
             #if radius > 1: im = pnip.blur(im, radius=radius)
+
+        im[white_mask] = 1
 
         ## Rescale image to make pixels isotropic 
         im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY)

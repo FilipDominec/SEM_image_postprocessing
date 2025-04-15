@@ -3,7 +3,7 @@
 # SIMPLE PREPROCESSING
 pixel_anisotropy        = 0.91      ## Set to <1 to compensate raw images being too wide
 subtract_min_brightness = True      ## If set, compensates for wrong zero-signal value of photomultiplier
-retouch_databar         = True      ## Full-white, thin-printed databar can be easily identified and retouched
+retouch_databar         = False     ## Full-white, thin-printed databar can be easily identified and retouched
 
 # SETTINGS FOR ALIGNMENT OF CATHODOLUMINESCENCE IMAGES
 disable_transform       = False     ## if set to true, the images will just be put atop of each other (no shift, no affine tr.)
