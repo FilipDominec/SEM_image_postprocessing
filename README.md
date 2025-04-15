@@ -65,6 +65,8 @@ The databar is added like with the other scripts, but now it also contains small
 
 Numerous options can be changed in the body of the script. This feature is still experimental - you may need to adapt this script to work for your user case.
 
+![EDX mapping example](docs/clustering_LED.jpg)
+
 ---
 
 ### pure_numpy_image_processing.py
