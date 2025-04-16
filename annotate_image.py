@@ -334,7 +334,7 @@ def annotate_individually(imname):
 
         radius = pnip.guess_blur_radius_from_spotsize_XL30(image_header)
         if radius > 1: 
-            if detectors.get(image_header['lDetName'],'') == "CL" or 1:
+            if detectors.get(image_header['lDetName'],'') == "CL":
                 im = pnip.blur(im, radius=radius, twopixel_despike=True)
                 pass
             else:
