@@ -285,6 +285,7 @@ def add_databar_XL30(im, imname, image_header, extra_color_list=None, appendix_l
                 # Note: by default the channels represent wavelength from 3rd position in the name, but 
                 # you can manually choose also p_kV for acc. voltage
                 p_kV, p_mag, p_wl = split_string_alpha_numeric(pathlib.Path(imname).stem)[:3]
+                float(p_wl) # check wl is a number
                 detname += ' ~'+p_wl+'nm'
             except:
                 pass
