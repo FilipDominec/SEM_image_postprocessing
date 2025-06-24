@@ -285,8 +285,8 @@ def add_databar_XL30(im, imname, image_header, extra_color_list=None, appendix_l
                 # Note: by default the channels represent wavelength from 3rd position in the name, but 
                 # you can manually choose also p_kV for acc. voltage
                 p_kV, p_mag, p_wl = split_string_alpha_numeric(pathlib.Path(imname).stem)[:3]
-                float(p_wl) # check wl is a number
-                detname += ' ~'+p_wl+'nm'
+                if float(p_wl) > 200: # (nm):  check wavelength in the name is a reasonable number
+                    detname += ' ~'+p_wl+'nm'
             except:
                 pass
         im = pnip.put_text(im, '{:<13} {:<13} {:<13}'.format(
@@ -326,8 +326,8 @@ def annotate_individually(imname):
         if ((im.shape[1] > downsample_size_threshold) and (float(image_header['Magnification']) >= downsample_magn_threshold)):
             im = pnip.downscaletwice(im)  # auto-downsample high-res images
 
-        if float(image_header['Magnification']) >= 9000: # auto-sharpen high-res images   TODO for SE images only! 
-            im = pnip.unsharp_mask(im, 1, (float(image_header['Magnification'])/10000)**.5)
+        #if float(image_header['Magnification']) >= 9000: # auto-sharpen high-res images   TODO for SE images only! 
+            #im = pnip.unsharp_mask(im, 1, (float(image_header['Magnification'])/10000)**.5)
 
         if ROTATE180: 
             im = im[::-1, ::-1]
@@ -336,7 +336,7 @@ def annotate_individually(imname):
         radius = pnip.guess_blur_radius_from_spotsize_XL30(image_header)
         if radius > 1: 
             if detectors.get(image_header['lDetName'],'') == "CL":
-                im = pnip.blur(im, radius=radius, twopixel_despike=True)
+                im = pnip.blur(im, radius=radius)
                 pass
             else:
                 im = pnip.unsharp_mask(im, weight=1, radius=radius)
@@ -344,7 +344,7 @@ def annotate_individually(imname):
             #radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
             #if radius > 1: im = pnip.blur(im, radius=radius)
 
-        im[white_mask] = 1
+        im[white_mask] = 1   # if there are pure-white drawings over SEM image, they might have been retouched - restore them
 
         ## Rescale image to make pixels isotropic 
         im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY)
@@ -355,7 +355,7 @@ def annotate_individually(imname):
         ## Export image
         outpath = pathlib.Path(imname).parent / (pathlib.Path(imname).stem + '.png')
         if not outpath.is_file() or OVERWRITE_ALLOWED: 
-            imageio.imsave(str(outpath), im)
+            imageio.imsave(str(outpath), im) # weird: multiplication by 0.1 does nothing, but by 0.0001 makes it black, this is some adaptive trick
             # try metadata with PIL? https://stackoverflow.com/questions/58399070/how-do-i-save-custom-information-to-a-png-image-file-in-python
             print(f"OK: Processed {imname} and exported to {outpath}.")
         else: 

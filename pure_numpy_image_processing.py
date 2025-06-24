@@ -53,15 +53,16 @@ def safe_imload(imname, retouch_databar=False, return_whitemask=False):
     """
     try: im = imageio.imread(str(imname)) 
     except: im = load_Philips30XL_BMP(imname)
-    im = im/255 if np.max(im)<256 else im/65535   ## 16-bit depth images should have at least one pixel over 255
+    im = im*1.0/255 if np.max(im)<256 else im*1.0/65535   ## 16-bit depth images should have at least one pixel over 255
     if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
-    white_mask = (im==np.max(im))
+    white_mask = (im==255 ) # np.max(im))
 
     if retouch_databar:
         for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)): # add  (-2,1),(2,1),  for 2px-wide retouch
             mask = (im==np.max(im))
             im[mask] = np.roll(im, shift, axis)[mask]
+
     if return_whitemask:
         return im, white_mask
     else:
@@ -74,7 +75,13 @@ def twopixel_despike(im):
     """ Removes "salt" noise of near white pixels in the image. This is to be applied before 
     any other blurring. """
     def twopixel_despike_channel(ch):
-            despiked = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2)
+            #despiked = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2)
+            spike_threshold = 1.2
+            despike_mask = ch[:-1,:]   >   (ch[1:,:] * spike_threshold)
+            despiked = ch[:-1,:]
+            np.putmask(despiked, despike_mask, ch[1:,:])
+            #despiked[despike_mask] = ch[1:,:]
+
             last_row = ch[-1,:]
             res = np.vstack([despiked, last_row]) # keep shape
             #print(ch.shape,  res.shape)
