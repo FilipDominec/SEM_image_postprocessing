@@ -1,11 +1,11 @@
-#!/usr/bin/python3  
+#!/usr/bin/env python3  
 #-*- coding: utf-8 -*-
 """
 Pure Numpy Image Editing:
 
 Sometimes it is easier to re-implement procedures with basic tools than to ensure advanced dependencies (like CV2) are met.
 
-An image is represented by a simple numpy array, always having 3 dimensions. These are: 
+An image is represented by a simple numpy array, having 3 dimensions (if not specified otherwise). These are: 
             width =  image width
             height = image height
             depth =  1 for monochrome image, 3 for R-G-B colour images
@@ -72,20 +72,16 @@ def safe_imload(imname, retouch_databar=False, return_whitemask=False):
 ## Blurring, denoising and sharpening
 
 def twopixel_despike(im):
-    """ Removes "salt" noise of near white pixels in the image. This is to be applied before 
-    any other blurring. """
-    def twopixel_despike_channel(ch):
-            #despiked = np.min(np.dstack([ch[:-1,:], ch[1:,:]]), axis=2)
+    """ Removes "salt" noise of near white pixels in the image. This is best applied before 
+    any other blurring/filtering. """
+    def twopixel_despike_channel(ch): # picking the lower of each pixel, or a pixel below
             spike_threshold = 1.2
-            despike_mask = ch[:-1,:]   >   (ch[1:,:] * spike_threshold)
+            despike_mask = ch[:-1,:] > (ch[1:,:] * spike_threshold)
             despiked = ch[:-1,:]
             np.putmask(despiked, despike_mask, ch[1:,:])
-            #despiked[despike_mask] = ch[1:,:]
-
             last_row = ch[-1,:]
             res = np.vstack([despiked, last_row]) # keep shape
-            #print(ch.shape,  res.shape)
-            return res # vertical pixel-wise de-spiking
+            return res 
     if len(np.shape(im)) == 3:      # handle channels of colour image separately
         return np.dstack([twopixel_despike_channel(channel) for channel in im])
     else:
@@ -121,7 +117,7 @@ def unsharp_mask(im, weight, radius, clip_to_max=True):
 
 def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function around scipy's implementation
     troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner 
-    if np.all(np.isclose(trmatrix, np.eye(2))): return im
+    if np.all(np.isclose(trmatrix, np.eye(2))) and np.all(np.isclose(shiftvec, np.zeros(2))): return im # no action
     return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
 
 def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True, detect_edges=False, rel_smoothing=2.5E-3):
@@ -140,9 +136,11 @@ def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True,
             corr = correlate2d(laplace(im1), im2, mode='valid')     
             lc = np.abs(gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1])) 
         else: ## search for best overlap of brightness
-            corr = correlate2d(im1-np.mean(im1), im2-np.mean(im2), mode='valid')     
-            corr = gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1])
-            lc = np.abs(corr) 
+            #corr = correlate2d(im1-np.mean(im1), im2-np.mean(im2), mode='valid')     
+            #corr = gaussian_filter(corr, sigma=rel_smoothing*im1.shape[1]) # slower approach (?)
+            im1_blur = gaussian_filter(im1, sigma=rel_smoothing*im1.shape[1])
+            corr = correlate2d(im1_blur-np.mean(im1), im2-np.mean(im2), mode='valid')     
+            lc = corr   # tip: use np.abs(corr) if matching possibly inverse contrast
         #cr=1  # post-laplace cropping, there were some edge artifacts
 
         raw_shifts = (np.unravel_index(np.argmax(np.abs(lc)), lc.shape)) # x,y coords of the optimum in the correlation map
@@ -195,14 +193,26 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0):
     """
     return zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
 
-def downscaletwice(im):
+def downscaletwice(im): # 2D only
     """
     A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
     Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
     """
+    return fast_decimate_2d(im, 2) # TODO test
+
+    #return zoom(
+            #convolve2d(im, [[.25,.25],[.25,.25]], mode='valid'), 
+            #[0.5, 0.5] + [1]*(len(im.shape)-2), 
+            #order=1) 
+def fast_decimate_2d(im, factor=3):
+    """
+    A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
+    Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
+    """
+    #(FIXME: this implementation shifts the data a bit, should use np.roll(-factor//2) on all axes)
     return zoom(
-            convolve2d(im, [[.25,.25],[.25,.25]], mode='valid'), 
-            [0.5, 0.5] + [1]*(len(im.shape)-2), 
+            convolve2d(im, np.ones([factor,factor]), mode='valid'),  # *factor**2
+            [1/factor, 1/factor] + [1]*(len(im.shape)-2), 
             order=1) 
 
 def auto_crop_black_borders(im, return_indices_only=False):
@@ -335,5 +345,36 @@ def put_bar(im, x, y, h, xw, color=None):
     if color is None: color = 1. if len(im.shape) == 2 else np.ones(im.shape[2])*1.
     im[y+2:y+h-2, x-1:x+xw] = color
     return im
+
+
+
+## Functions not used by SEM utilities
+def find_image_center_by_corr(im, max_off_center_px = 40): # (may also be replaced e.g. by skued.autocenter)
+    im_crop = im[max_off_center_px:-max_off_center_px, max_off_center_px:-max_off_center_px]
+    im_crop_flipped = im_crop[::-1, ::-1]
+    xshift, yshift = find_affine_and_shift(
+            im, 
+            im_crop_flipped,
+            0.1, 1, use_affine_transform=False, detect_edges=False, rel_smoothing=12.5E-3)[0]
+    return xshift, yshift
+
+def diagnostic_imsave(imname, arr, gamma=0.5):
+    imageio.imsave(f'{imname}_{gamma}.png', ((np.clip(arr.astype(float), 0, np.inf)/np.max(arr))**gamma * 255).astype(np.uint8))
+def nparray2image(imname, arr, gamma=0.5, normalize_to='auto'):
+    """ Converts complex values of any 2D array to rainbow colour (positive real part is red, negative cyan; 
+    positive imaginary part yellow, negative imaginary purple; zero is black). Perceptive brightness is roughly 
+    equal for complex numbers of equal magnitude.
+    The output brightness scaling controlled by gamma (use e.g. 0.333 to strongly enhance low values). 
+    Set `imname` to None to prevent saving a PNG file, only the R-G-B values are returned as an eight-bit 3D numpy array.
+    """
+    A,p = np.abs(arr), np.angle(arr)
+    hue_component = np.dstack([0.4+0.4*np.cos(p), 0.3+0.3*np.cos(p+np.pi*2/3), 0.5+0.5*np.cos(p+np.pi*4/3)])
+    brightness_component = A / np.max(abs(A)) if normalize_to=='auto' else A / normalize_to
+    for ch in range(3): 
+        hue_component[:,:,ch] *= brightness_component**gamma
+    rgb_full = (np.clip(hue_component, 0, 1)*255).astype(np.uint8)
+    if imname is not None:
+        imageio.imsave(f'{imname}_gamma{gamma:.2f}.png', rgb_full)
+    return rgb_full
 
 
