@@ -256,6 +256,8 @@ def add_databar_XL30(im, imname, image_header, extra_color_list=None, appendix_l
         elif size_x < 1:  size_str = '{:<4f}'.format(size_x*1000)[:4] + '×{:<4f}'.format(size_y*1000)[:4] + ' nm'
         else:             size_str = '{:<4f}'.format(size_x)[:4]      + '×{:<4f}'.format(size_y)[:4]      + ' μm'
 
+        ## TODO test: size_str = size_str.replace('.×', '×').replace('. ', ' ')
+
         ## Print the first couple of rows in the databar
         scale_bar = log_floor(size_x/4.8) # in μm
         if scale_bar > 1000:     scale_num, scale_unit = scale_bar / 1000, 'mm' 
@@ -314,7 +316,7 @@ def add_databar_XL30(im, imname, image_header, extra_color_list=None, appendix_l
 ## Load images
 def annotate_individually(imname):
         print(f'Annotating {imname}')
-        im, white_mask = pnip.safe_imload(imname, retouch_databar=False, return_whitemask=True)
+        im, white_mask, black_mask = pnip.safe_imload(imname, retouch_databar=False, return_whiteblackmasks=True)
 
         image_header = analyze_header_XL30(imname)
 
@@ -329,9 +331,6 @@ def annotate_individually(imname):
         #if float(image_header['Magnification']) >= 9000: # auto-sharpen high-res images   TODO for SE images only! 
             #im = pnip.unsharp_mask(im, 1, (float(image_header['Magnification'])/10000)**.5)
 
-        if ROTATE180: 
-            im = im[::-1, ::-1]
-        
 
         radius = pnip.guess_blur_radius_from_spotsize_XL30(image_header)
         if radius > 1: 
@@ -344,7 +343,12 @@ def annotate_individually(imname):
             #radius = float(image_header['Magnification'])/5000   *  2**(float(image_header['flSpot']) * .5 - 2)
             #if radius > 1: im = pnip.blur(im, radius=radius)
 
+        im[black_mask] = 0   
         im[white_mask] = 1   # if there are pure-white drawings over SEM image, they might have been retouched - restore them
+
+        if ROTATE180: 
+            im = im[::-1, ::-1]
+        
 
         ## Rescale image to make pixels isotropic 
         im = pnip.anisotropic_prescale(im, pixel_anisotropy=PIXEL_ANISOTROPY)

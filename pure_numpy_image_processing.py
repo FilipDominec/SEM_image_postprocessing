@@ -1,9 +1,9 @@
 #!/usr/bin/env python3  
 #-*- coding: utf-8 -*-
 """
-Pure Numpy Image Editing:
+Pure Numpy Image Processing:
 
-Sometimes it is easier to re-implement procedures with basic tools than to ensure advanced dependencies (like CV2) are met.
+Sometimes it is easier to re-implement procedures with basic tools than to ensure advanced dependencies are met.
 
 An image is represented by a simple numpy array, having 3 dimensions (if not specified otherwise). These are: 
             width =  image width
@@ -12,14 +12,20 @@ An image is represented by a simple numpy array, having 3 dimensions (if not spe
 
 Note this module relies also on Scipy functions.
 
-FIXME: sometimes monochrome images are returned as just 2-D arrays
-TODO: check if there is no reasonable alternative, then put all functions from this module into a class
-TODO: make this compatible with https://scipy-lectures.org/advanced/image_processing/ and propose partial merge
+FIXME: sometimes monochrome images are returned as just 2-D arrays, this should be OK
+    shapes (m, n) and (m, n, 1) should be both accepted and maintained for monochrome image operations
+TODO: check if there is no reasonable alternative, then put all functions from this module into a class (?)
+TODO: make this compatible with https://scipy-lectures.org/advanced/image_processing/, dedupe, then propose partial merge
 
 """
 
-import imageio, pathlib
+import logging
+for unwanted_logger in ("PIL.Image", "PIL.PngImagePlugin"):
+    logging.getLogger(unwanted_logger).setLevel(logging.CRITICAL) # prevent PIL spitting out garbage
+
+import imageio 
 import numpy as np
+from pathlib import Path
 
 from scipy.ndimage import laplace, gaussian_filter
 from scipy.ndimage import affine_transform, zoom
@@ -43,7 +49,7 @@ def load_Philips30XL_BMP(fname):
     assert compr == 0, 'no decompression algorithm implemented'
     return np.fromfile(fname, dtype=np.uint8)[ofs:ofs+w*h].reshape(h,w)[::-1,:] # BMP is "upside down" - flip vertically
 
-def safe_imload(imname, retouch_databar=False, return_whitemask=False):
+def safe_imload(imname, retouch_databar=False, return_whiteblackmasks=False):
     """
     Loads an image as 1-channel (that is, either grayscale, or a fixed palette such as those from Philips30XL EDX)
 
@@ -53,18 +59,42 @@ def safe_imload(imname, retouch_databar=False, return_whitemask=False):
     """
     try: im = imageio.imread(str(imname)) 
     except: im = load_Philips30XL_BMP(imname)
+
+    if len(im.shape) == 3 and im.shape[0] == 4: # user-made Graphics or Measurement bars by XL30 Microscope Control application
+        print('im.shape', im.shape)
+        # channel0: grayscale image and (burnt-in) Measurement lines only
+        # channel #1 is bright Graphics, 
+        # channel #2 is bright Text (stored as inverted binary mask)
+        # channel #3 dark Graphics (dtto)
+
+
+        # This would thus flatten the XL30 image, including the black as well as white drawings:
+        #im = np.max([im[0]*im[3], 255-255*(im[2])], axis=0) 
+        #white_mask = (im==255)
+        
+        # Instead we let the image be sharpened etc., and keep the white & black masks
+        white_mask = np.logical_or(im[2]==0, im[0]==255)
+        black_mask = (im[3]==0)
+        im = im[0] 
+        #print('im.shape', im.shape)
+        #print('white_maskim.shape', white_mask.shape)
+
+    elif len(im.shape) == 3 and im.shape[0] == 3: # this is probably RGB image?
+        im = im[:,:,0] # will be using monochrome images here; strip other channels than the first
+    else: # the usual SEM output: single-channel grayscale image
+        white_mask = (im==255) # guess the white Measurement mask
+        black_mask = (im==0) # guess the white Measurement mask
+
+    # Convert to 0..1 float values
     im = im*1.0/255 if np.max(im)<256 else im*1.0/65535   ## 16-bit depth images should have at least one pixel over 255
-    if len(im.shape) > 2: im = im[:,:,0] # always using monochrome images only; strip other channels than the first
 
-    white_mask = (im==255 ) # np.max(im))
+    #if retouch_databar:
+        #for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)): # add  (-2,1),(2,1),  for 2px-wide retouch
+            #mask = (im==np.max(im))
+            #im[mask] = np.roll(im, shift, axis)[mask]
 
-    if retouch_databar:
-        for shift,axis in ((1,0),(-1,0),(1,1),(-1,1),(2,0)): # add  (-2,1),(2,1),  for 2px-wide retouch
-            mask = (im==np.max(im))
-            im[mask] = np.roll(im, shift, axis)[mask]
-
-    if return_whitemask:
-        return im, white_mask
+    if return_whiteblackmasks:
+        return im, white_mask, black_mask
     else:
         return im
 
@@ -115,10 +145,10 @@ def unsharp_mask(im, weight, radius, clip_to_max=True):
 
 ## Geometry adjustments
 
-def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2)): ## convenience function around scipy's implementation
+def my_affine_tr(im, trmatrix, shiftvec=np.zeros(2), order=3): ## convenience function around scipy's implementation
     troffset = np.dot(np.eye(2)-trmatrix, np.array(im.shape)/2) ## transform around centre, not corner 
     if np.all(np.isclose(trmatrix, np.eye(2))) and np.all(np.isclose(shiftvec, np.zeros(2))): return im # no action
-    return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
+    return affine_transform(im, trmatrix, offset=shiftvec+troffset, output_shape=None, output=None, order=order, mode='constant', cval=0.0, prefilter=True)
 
 def find_affine_and_shift(im1, im2, max_shift, decim, use_affine_transform=True, detect_edges=False, rel_smoothing=2.5E-3):
     def find_shift(im1, im2, max_shift, decim):
@@ -194,20 +224,15 @@ def anisotropic_prescale(im, pixel_anisotropy=1.0):
     return zoom(im, [1./pixel_anisotropy] + [1]*(len(im.shape)-1), order=1)
 
 def downscaletwice(im): # 2D only
-    """
-    A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
-    Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
-    """
     return fast_decimate_2d(im, 2) # TODO test
-
     #return zoom(
             #convolve2d(im, [[.25,.25],[.25,.25]], mode='valid'), 
             #[0.5, 0.5] + [1]*(len(im.shape)-2), 
             #order=1) 
+
 def fast_decimate_2d(im, factor=3):
     """
-    A convenience function to reduce image sizes when pixels are far smaller than SEM beam resolution. 
-    Its settings were tuned to reduce visual noise without affecting sharpness of detail. 
+    A convenience function to reduce image sizes when pixels are far smaller than the real instrument resolution. 
     """
     #(FIXME: this implementation shifts the data a bit, should use np.roll(-factor//2) on all axes)
     return zoom(
@@ -290,7 +315,7 @@ def paste_overlay_inplace(bgimage, fgimage, shiftvec, color_tint, normalize=1, c
 
 ## Text/image/drawing overlay routines
 
-def inmydir(fn): return pathlib.Path(__file__).resolve().parent/fn # finds the basename in the script's dir
+def inmydir(fn): return Path(__file__).resolve().parent/fn # finds the basename in the script's dir
 
 def text_initialize(typecase_rel_path='typecase.png'):
     typecase_str = ''.join([chr(c) for c in list(range(32,127))+list(range(0x391,0x3a2))+list(range(0x3a3, 0x3aa))+\
@@ -308,21 +333,27 @@ def text_initialize(typecase_rel_path='typecase.png'):
     typecase_dict['ch'], typecase_dict['cw'] = ch, cw
     return typecase_dict, ch, cw
 
-def put_text(im, text, x, y, typecase_dict, color=1, scale=1):
+def put_text(im, text, x, y, typecase_dict, color=1, scale=1, align='l'):
     ch, cw  = typecase_dict['ch'], typecase_dict['cw']
+    if align == 'r': # experimental, should check for left cropping...
+        x -= cw*scale*len(text)
     for n,c in enumerate(text): 
-        if x+cw*(n+1)*scale > im.shape[1]: print('Warning, text on image clipped to',text[:n]); break
-        else: 
+        #if x+cw*(n+1)*scale > im.shape[1]: 
+        try: 
             glyph = typecase_dict.get(c, typecase_dict['?'])
             if scale > 1:
                 glyph = np.repeat(glyph, max(1,int(scale)), axis=0)
                 glyph = np.repeat(glyph, max(1,int(scale)), axis=1)
                 for gx in range(1, glyph.shape[0]-1):
                     for gy in range(1, glyph.shape[1]-1):
-
                         glyph[gx,gy] = np.modus([glyph[gx,gy]]*1 + [glyph[gx+dx,gy+dy] for dx in [-1,0,1] for dy in  [-1,0,1]]  )
             #print (im[y:y+ch*scale, x+cw*n*scale:x+cw*(n+1)*scale].shape , glyph.shape)
             im[y:y+ch*scale, x+cw*n*scale:x+cw*(n+1)*scale] = match_wb_and_color(im, glyph) * color
+            #im[y:y+ch*scale, x+cw*n*scale:x+cw*(n+1)*scale] = match_wb_and_color(im, glyph) * color
+        except ValueError:
+            pass
+            #print('Warning, cannot place letter on image',text[:n], ' at coordinates', x,y )
+
     return im
 
 def put_image(im, inserted_img, x, y, color=1):
@@ -358,23 +389,69 @@ def find_image_center_by_corr(im, max_off_center_px = 40): # (may also be replac
             0.1, 1, use_affine_transform=False, detect_edges=False, rel_smoothing=12.5E-3)[0]
     return xshift, yshift
 
-def diagnostic_imsave(imname, arr, gamma=0.5):
-    imageio.imsave(f'{imname}_{gamma}.png', ((np.clip(arr.astype(float), 0, np.inf)/np.max(arr))**gamma * 255).astype(np.uint8))
-def nparray2image(imname, arr, gamma=0.5, normalize_to='auto'):
-    """ Converts complex values of any 2D array to rainbow colour (positive real part is red, negative cyan; 
+def diagnostic_imsave(basename, arr, gamma=1.):
+    imageio.imsave(f'{basename}_{gamma}.png', ((np.clip(arr.astype(float), 0, np.inf)/np.max(arr))**gamma * 255).astype(np.uint8))
+def nparray2image(basename, arr, gamma=1., normalize_to='auto', put_gamma_in_filename=False,
+                  percentile=99., lev=.9, enable_NPZ_sidecar=True):
+    """ Converts (possibly complex) values of any 2D array to rainbow colour (positive real part is red, negative cyan; 
     positive imaginary part yellow, negative imaginary purple; zero is black). Perceptive brightness is roughly 
     equal for complex numbers of equal magnitude.
     The output brightness scaling controlled by gamma (use e.g. 0.333 to strongly enhance low values). 
-    Set `imname` to None to prevent saving a PNG file, only the R-G-B values are returned as an eight-bit 3D numpy array.
+    Set `basename` to None to prevent saving a PNG file, only the R-G-B values are returned as an eight-bit 3D numpy array.
     """
+
+    if basename is not None and enable_NPZ_sidecar:
+        np.savez_compressed(f'{basename}', 
+                            arr) # note: saves complex128 type
+
     A,p = np.abs(arr), np.angle(arr)
-    hue_component = np.dstack([0.4+0.4*np.cos(p), 0.3+0.3*np.cos(p+np.pi*2/3), 0.5+0.5*np.cos(p+np.pi*4/3)])
-    brightness_component = A / np.max(abs(A)) if normalize_to=='auto' else A / normalize_to
+    if np.iscomplexobj(arr):
+        hue_component = np.dstack([0.4+0.4*np.cos(p), 0.3+0.3*np.cos(p-np.pi*2/3), 0.5+0.5*np.cos(p-np.pi*4/3)])
+        hue_component = hue_component**.7 # perceptually enhance composed hues (yellow, cyan, magenta)
+    else:
+        hue_component = np.dstack([np.ones_like(p)]*3)
+    A = clip_using_percentile(A,subgrid=1,q=percentile,lev=lev)
+    brightness_component = A / np.max(abs(A)+1e-15)   if normalize_to=='auto' else   A / normalize_to
     for ch in range(3): 
         hue_component[:,:,ch] *= brightness_component**gamma
     rgb_full = (np.clip(hue_component, 0, 1)*255).astype(np.uint8)
-    if imname is not None:
-        imageio.imsave(f'{imname}_gamma{gamma:.2f}.png', rgb_full)
+    if basename is not None:
+        if put_gamma_in_filename:
+            imageio.imsave(f'{basename}_gamma{gamma:.2f}.png', rgb_full, format='png')
+        else:
+            imageio.imsave(f'{basename}.png', rgb_full, format='png')
     return rgb_full
 
+def tiny_progressbar(current, whole=1, full='█', bars=u'▉▊▋▌▍▎▏ '[::-1], empty='·', w=50): 
+    """ A practical tiny progressbar. Note that current and whole attribs can also be elements 
+    of a list, or just two numbers. Tip: for Pacman mode, use:  ᗦᗠ , or square mode: ▪◾◼ ■"""
+    p = (list(whole).index(current)+1)/len(whole) if hasattr(whole, '__iter__')  else  current/whole 
+    return (f"  {full*int(p*w)}{bars[int(len(bars)*((p*w)%1))]}{empty*int((1+1e-9-p)*w-1e-9)} {p*100:6.1f}% ") 
+def print_tiny_progressbar(text, *pbargs): # for convenience
+    print(tiny_progressbar(*pbargs), text, end='\r', flush=1)
 
+## Auto compensation of inhomogeneity due to subpixel cluster interpolation
+def removeBayerLikeGrid_in_place(arr, subPixRes=2, maximum_enhancement_factor=130, ref_submatrix_start=[2,2]):
+    m0 = np.mean(arr[0::subPixRes, 0::subPixRes])
+    #verboprint('Debayering mean', m0)
+    for ix in range(subPixRes):
+        for iy in range(subPixRes):
+            submatrix = arr[(iy+ref_submatrix_start[0])%subPixRes::subPixRes, 
+                            (ix+ref_submatrix_start[0])%subPixRes::subPixRes]
+            ms = np.mean(submatrix)+1e-15
+            factor = np.clip(m0/ms, 1/maximum_enhancement_factor, maximum_enhancement_factor)
+            #print(ix,iy, f'{m0/ms=}, {factor=}')
+            if not np.isnan(factor) and not np.isinf(factor): 
+                submatrix *= factor
+
+            ## TEST
+            #submatrix = arr[(iy+ref_submatrix_start[0])%subPixRes::subPixRes, 
+                            #(ix+ref_submatrix_start[0])%subPixRes::subPixRes]
+            #ms = np.mean(submatrix)+1e-15
+            #factor = np.clip(m0/ms, 1/maximum_enhancement_factor, maximum_enhancement_factor)
+            #print(ix,iy, f'{m0/ms=}, {factor=} TEST')
+
+def clip_using_percentile(image, q=99, subgrid=3, lev=.75): 
+    # todo rename clip_to_percentile_fast and remove the `lev` option
+    per = np.percentile(image[::subgrid,::subgrid], q=q)
+    return np.clip(image, 0, per/lev)
